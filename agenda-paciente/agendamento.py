@@ -62,38 +62,51 @@ st.markdown("""
             color: #9A2A5A; font-weight: 700; margin-top: 20px; margin-bottom: 8px; 
             border-left: 5px solid #9A2A5A; padding-left: 10px; background-color: rgba(255,255,255,0.5);
         }
+        
+        /* Alerta de erro no topo */
+        .stAlert { font-weight: bold; }
     </style>
 """, unsafe_allow_html=True)
 
 # --- 3. CONEXÃO GOOGLE SHEETS ROBUSTA ---
 
 @st.cache_resource
-def conectar_google_sheets():
-    """Conecta e retorna a planilha com tratamento de erro"""
+def get_gspread_client():
+    """Autentica no Google e mantém o cliente em cache"""
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         creds_dict = st.secrets["gcp_service_account"]
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
-        # Tenta abrir a planilha
-        sheet = client.open("Agenda Dra Thais").sheet1
-        return sheet
+        return client
     except Exception as e:
         return None
 
+def conectar_google_sheets():
+    """Abre a planilha específica (sem cache para evitar dados velhos)"""
+    client = get_gspread_client()
+    if client is None: return None
+    
+    try:
+        # Tenta abrir a planilha pelo nome exato
+        sheet = client.open("Agenda Dra Thais").sheet1
+        return sheet
+    except Exception:
+        return None
+
 def carregar_dados_gs():
-    """Baixa dados e garante que o DataFrame tenha colunas mesmo se vazio"""
+    """Baixa dados e garante que o DataFrame tenha colunas"""
     sheet = conectar_google_sheets()
     if sheet is None:
-        return pd.DataFrame() # Retorna vazio se não conectar
+        return pd.DataFrame()
         
     try:
         data = sheet.get_all_records()
         df = pd.DataFrame(data)
         
-        # Se a planilha estiver vazia ou nova, cria as colunas manualmente para não dar erro
+        # Garante colunas mínimas se estiver vazia
         colunas_esperadas = ['Nome', 'Telefone', 'Data', 'Horario', 'Servico', 'Anamnese', 'Timestamp']
-        if df.empty or not set(colunas_esperadas).issubset(df.columns):
+        if df.empty:
             return pd.DataFrame(columns=colunas_esperadas)
             
         return df
@@ -101,51 +114,55 @@ def carregar_dados_gs():
         return pd.DataFrame()
 
 def salvar_agendamento(nome, tel, data, hora, serv, anam):
-    """Salva no Sheets com tratamento de erro explícito"""
+    """Salva no Sheets com tratamento de erro e formato de data BR"""
     sheet = conectar_google_sheets()
     if sheet is None:
-        return "Erro: Falha na conexão com Google Sheets. Verifique os Segredos."
+        return "Erro CRÍTICO: Não foi possível conectar à planilha. Verifique o nome 'Agenda Dra Thais' no Google."
         
     try:
-        # Converte tudo para string para garantir que o Sheets aceite
-        linha = [
-            str(nome), 
-            str(tel), 
-            str(data),  # Salva como YYYY-MM-DD
-            str(hora), 
-            str(serv), 
-            str(anam), 
-            str(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        ]
+        # Força data no formato brasileiro para o Excel/Sheets não confundir
+        data_br = data.strftime("%d/%m/%Y")
+        agora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        
+        linha = [str(nome), str(tel), str(data_br), str(hora), str(serv), str(anam), str(agora)]
+        
+        # Adiciona na linha 2 se estiver vazia, ou no final
         sheet.append_row(linha)
         return "OK"
     except Exception as e:
-        return f"Erro ao gravar: {e}"
+        return f"Erro técnico ao gravar: {e}"
 
 def get_horarios_ocupados(data_desejada):
-    """Verifica horários ocupados"""
+    """Busca horários ocupados convertendo formatos de data"""
     df = carregar_dados_gs()
     if df.empty:
         return []
     
-    # Normalização de dados para comparação
-    if 'Data' not in df.columns or 'Horario' not in df.columns:
-        return []
+    # Normaliza a data da planilha e a data desejada para string simples
+    # A planilha pode ter salvo como '2025-12-04' ou '04/12/2025'
+    try:
+        # Tenta padronizar a coluna Data para string
+        df['Data'] = df['Data'].astype(str)
         
-    df['Data'] = df['Data'].astype(str)
-    data_str = str(data_desejada)
-    
-    # Filtra
-    ocupados = df[df['Data'] == data_str]['Horario'].tolist()
-    return ocupados
+        # Data desejada em formato BR (que é como estamos salvando agora)
+        data_br = data_desejada.strftime("%d/%m/%Y")
+        # Data desejada em formato ISO (caso tenha salvos antigos)
+        data_iso = str(data_desejada)
+        
+        # Filtra se for igual a qualquer um dos dois formatos
+        ocupados = df[
+            (df['Data'] == data_br) | (df['Data'] == data_iso)
+        ]['Horario'].tolist()
+        
+        return ocupados
+    except:
+        return []
 
 def buscar_agendamentos_cliente(telefone):
     df = carregar_dados_gs()
     if df.empty: return pd.DataFrame()
     
     telefone_usuario = re.sub(r'\D', '', telefone)
-    
-    # Garante que as colunas existam
     if 'Telefone' not in df.columns: return pd.DataFrame()
 
     df['tel_limpo'] = df['Telefone'].astype(str).apply(lambda x: re.sub(r'\D', '', x))
@@ -182,16 +199,21 @@ if st.session_state.pagina == 'home':
 
     st.markdown("<div style='margin-top: 60px; text-align: center; color: #999; font-size: 12px;'><p>📍 Taubaté/SP | CRO 12345</p></div>", unsafe_allow_html=True)
 
-    # Diagnóstico de Conexão na Home (apenas para teste)
-    if st.sidebar.checkbox("Verificar Conexão Google"):
-        sheet = conectar_google_sheets()
-        if sheet:
-            st.sidebar.success(f"Conectado à planilha: {sheet.title}")
-        else:
-            st.sidebar.error("Falha na conexão. Verifique se compartilhou a planilha com o email do service account.")
-
-    # Acesso Admin
+    # Diagnóstico Rápido na Barra Lateral
     with st.sidebar:
+        st.header("🔧 Status do Sistema")
+        if st.button("Testar Conexão Google"):
+            client = get_gspread_client()
+            if client:
+                try:
+                    sheet = client.open("Agenda Dra Thais").sheet1
+                    st.success(f"✅ Conectado: {sheet.title}")
+                    st.info(f"Linhas atuais: {len(sheet.get_all_values())}")
+                except Exception as e:
+                    st.error(f"❌ Erro ao abrir planilha: {e}")
+            else:
+                st.error("❌ Erro de Autenticação (Secrets)")
+
         st.write("---")
         if st.text_input("Senha Admin", type="password") == "admin123":
             if st.button("Acessar Painel"): ir_para('admin_panel')
@@ -202,17 +224,19 @@ elif st.session_state.pagina == 'agendar':
 
     st.markdown("<h2 style='color:#9A2A5A; margin-bottom:0px'>Ficha do Paciente</h2>", unsafe_allow_html=True)
     
+    # Container para mensagens de erro aparecerem no topo
+    msg_container = st.container()
+
     with st.form("form_anamnese"):
         st.markdown("<div class='anamnese-header'>1. Agendamento</div>", unsafe_allow_html=True)
         
         c1, c2 = st.columns([1, 1], gap="small")
         with c1: 
-            # Data mínima hoje
             data_agend = st.date_input("📅 Data Desejada", min_value=datetime.today(), format="DD/MM/YYYY")
         with c2: 
             servico = st.selectbox("🦷 Procedimento", ["Avaliação (1ª Vez)", "Limpeza", "Restauração", "Clareamento", "Harmonização", "Dor/Urgência"])
 
-        # Lógica de horários com tratamento de erro
+        # Busca horários
         horarios = ["08:00", "09:00", "10:00", "11:00", "14:00", "15:00", "16:00", "17:00"]
         try:
             ocupados = get_horarios_ocupados(data_agend)
@@ -221,21 +245,20 @@ elif st.session_state.pagina == 'agendar':
             
         livres = [h for h in horarios if h not in ocupados] if data_agend.weekday() < 5 else []
         
+        hora_selecionada = "Indisponível"
         if data_agend.weekday() >= 5: 
             st.warning("⚠️ Atendimentos apenas de Segunda a Sexta.")
-            hora = "Indisponível"
         else:
             if not livres:
                 st.warning("📅 Dia lotado. Tente outra data.")
-                hora = "Indisponível"
             else:
-                hora = st.selectbox("⏰ Horário Disponível", livres)
+                hora_selecionada = st.selectbox("⏰ Horário Disponível", livres)
 
         st.markdown("<div class='anamnese-header'>2. Seus Dados</div>", unsafe_allow_html=True)
         nome = st.text_input("👤 Nome Completo")
         tel_input = st.text_input("📱 WhatsApp (DDD + Número)", placeholder="Ex: 12 99999-9999")
         
-        # Nascimento Simplificado
+        # Nascimento
         st.markdown("**🎂 Data de Nascimento**")
         dn_col1, dn_col2, dn_col3 = st.columns([3, 5, 4], gap="small")
         with dn_col1: dia_nasc = st.selectbox("Dia", list(range(1, 32)))
@@ -269,7 +292,6 @@ elif st.session_state.pagina == 'agendar':
             st.divider()
             alergia_tem = st.radio("Tem Alergias?", ["Não", "Sim"], horizontal=True)
             alergia_desc = st.text_input("Quais?") if alergia_tem == "Sim" else "Nenhuma"
-            # CORRIGIDO TEXTO
             medicamentos = st.text_area("Toma algum remédio de uso contínuo?", placeholder="Ex: Losartana...")
 
         with tab_bucal:
@@ -292,10 +314,15 @@ elif st.session_state.pagina == 'agendar':
         if submit:
             tel_limpo = re.sub(r'\D', '', tel_input)
             
-            if not nome or len(nome) < 3: st.error("⚠️ Preencha seu Nome Completo.")
-            elif len(tel_limpo) < 10: st.error("⚠️ WhatsApp inválido.")
-            elif hora == "Indisponível": st.error("⚠️ Horário indisponível.")
+            # Validações antes de tentar salvar
+            if not nome or len(nome) < 3: 
+                msg_container.error("⚠️ Preencha seu Nome Completo.")
+            elif len(tel_limpo) < 10: 
+                msg_container.error("⚠️ WhatsApp inválido. Digite DDD + Número.")
+            elif hora_selecionada == "Indisponível": 
+                msg_container.error("⚠️ Horário indisponível. Escolha outro.")
             else:
+                # Prepara dados
                 idade = (date.today() - data_nasc).days // 365
                 lista_saude = []
                 if diabetes: lista_saude.append("Diabetes")
@@ -313,8 +340,8 @@ elif st.session_state.pagina == 'agendar':
                 )
                 tel_formatado = formatar_telefone(tel_limpo)
                 
-                with st.spinner("Salvando na agenda..."):
-                    resultado = salvar_agendamento(nome, tel_formatado, data_agend, hora, servico, ficha_completa)
+                with st.spinner("Conectando ao Google Sheets..."):
+                    resultado = salvar_agendamento(nome, tel_formatado, data_agend, hora_selecionada, servico, ficha_completa)
                 
                 if resultado == "OK":
                     st.balloons()
@@ -322,12 +349,12 @@ elif st.session_state.pagina == 'agendar':
                         <div class="ticket">
                             <div class="ticket-title">✅ Agendamento Confirmado!</div>
                             <p><b>{nome}</b></p>
-                            <p>{data_agend.strftime('%d/%m/%Y')} às {hora}</p>
+                            <p>{data_agend.strftime('%d/%m/%Y')} às {hora_selecionada}</p>
                             <p>{servico}</p>
                         </div>
                     """, unsafe_allow_html=True)
                     
-                    msg = f"Olá! Sou *{nome}*. Agendei *{servico}* para dia *{data_agend.strftime('%d/%m')}* às *{hora}*."
+                    msg = f"Olá! Sou *{nome}*. Agendei *{servico}* para dia *{data_agend.strftime('%d/%m')}* às *{hora_selecionada}*."
                     st.markdown(f'''
                         <a href="https://wa.me/5512987054320?text={msg}" target="_blank" style="text-decoration:none;">
                             <div style="background-color:#25D366; color:white; padding:15px; border-radius:10px; text-align:center; font-weight:bold; margin-top:10px;">
@@ -335,12 +362,13 @@ elif st.session_state.pagina == 'agendar':
                             </div>
                         </a>
                     ''', unsafe_allow_html=True)
+                    
                     time.sleep(10)
                     ir_para('home')
                     st.rerun()
                 else:
-                    st.error(f"Erro ao salvar: {resultado}")
-                    st.info("Verifique se o e-mail do robô foi adicionado como Editor na planilha.")
+                    msg_container.error(f"❌ {resultado}")
+                    msg_container.info("Dica: Verifique se o nome da planilha é exatamente 'Agenda Dra Thais' e se o robô é Editor.")
 
 # --- 7. TELA: RESERVAS ---
 elif st.session_state.pagina == 'reservas':
@@ -351,7 +379,7 @@ elif st.session_state.pagina == 'reservas':
     if st.button("🔎 Buscar"):
         df = buscar_agendamentos_cliente(tel_busca)
         if not df.empty: st.dataframe(df, hide_index=True)
-        else: st.warning("Nada encontrado.")
+        else: st.warning("Nenhum agendamento encontrado.")
 
 # --- 8. TELA: ADMIN ---
 elif st.session_state.pagina == 'admin_panel':
