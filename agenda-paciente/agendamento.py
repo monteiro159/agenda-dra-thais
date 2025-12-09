@@ -9,108 +9,58 @@ from oauth2client.service_account import ServiceAccountCredentials
 # --- 1. CONFIGURAÇÃO INICIAL ---
 st.set_page_config(page_title="Dra. Thais Milene", page_icon="🦷", layout="centered", initial_sidebar_state="collapsed")
 
-# --- 2. CONFIGURAÇÃO DA PLANILHA (VIA LINK - BLINDADO) ---
-# Link direto para a sua planilha
-SHEET_URL = "https://docs.google.com/spreadsheets/d/16YOR1odJ11iiUUI_y62FKb7GotQSRZeu64qP6RwZXrU/edit?gid=0#gid=0"
+# --- 2. CONFIGURAÇÃO DA PLANILHA (USANDO ID - MAIS SEGURO) ---
+# Em vez do link inteiro, usamos só o código ID da planilha
+SHEET_ID = "16YOR1odJ11iiUUI_y62FKb7GotQSRZeu64qP6RwZXrU"
 
-# --- 3. ESTILO VISUAL (CSS OTIMIZADO) ---
+# --- 3. ESTILO VISUAL ---
 st.markdown("""
     <style>
         .stApp { background-color: #FCEEF5; }
-        
-        /* Botões Estilo App */
-        .big-button {
-            width: 100%; height: 120px; border-radius: 20px; border: none;
-            color: white; font-size: 20px; font-weight: bold; cursor: pointer;
-            margin-bottom: 15px; display: flex; align-items: center; justify-content: center;
-            text-decoration: none; transition: transform 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        }
+        .big-button { width: 100%; height: 120px; border-radius: 20px; color: white; font-size: 20px; font-weight: bold; cursor: pointer; margin-bottom: 15px; display: flex; align-items: center; justify-content: center; text-decoration: none; transition: transform 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
         .big-button:hover { transform: scale(1.02); }
-
-        div[data-testid="stButton"] button { border-radius: 12px; height: 50px; font-weight: 600; border: none; }
-        
-        div[data-testid="stButton"] button[kind="primary"] {
-            background-color: #9A2A5A; color: white !important; font-size: 16px;
-            box-shadow: 0 4px 10px rgba(154, 42, 90, 0.2);
-        }
-        
-        div[data-testid="stButton"] button[kind="secondary"] {
-            background-color: #FFFFFF; color: #9A2A5A !important; font-size: 16px; border: 1px solid #F3D0DE;
-        }
-
-        /* Inputs Modernos */
-        .stTextInput input, .stSelectbox div[data-baseweb="select"] div, .stDateInput input, .stTextArea textarea {
-            background-color: #FFFFFF !important; border: 1px solid #E3CWD8 !important;
-            border-radius: 12px !important; color: #495057 !important; padding-left: 10px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.02) !important;
-        }
-        
-        .stTextInput input:focus, .stSelectbox div:focus, .stDateInput input:focus {
-            border-color: #9A2A5A !important; box-shadow: 0 0 0 1px #9A2A5A !important;
-        }
-        
+        div[data-testid="stButton"] button[kind="primary"] { background-color: #9A2A5A; color: white !important; border: none; border-radius: 12px; height: 50px; font-size: 16px; }
+        div[data-testid="stButton"] button[kind="secondary"] { background-color: #FFFFFF; color: #9A2A5A !important; border: 1px solid #F3D0DE; border-radius: 12px; height: 50px; font-size: 16px; }
+        .stTextInput input, .stSelectbox div[data-baseweb="select"] div, .stDateInput input, .stTextArea textarea { background-color: #FFFFFF !important; border: 1px solid #E3CWD8 !important; border-radius: 12px !important; color: #495057 !important; padding-left: 10px; }
+        .stTextInput input:focus, .stSelectbox div:focus, .stDateInput input:focus { border-color: #9A2A5A !important; box-shadow: 0 0 0 1px #9A2A5A !important; }
         h1, h2, h3, p, label, .stMarkdown { color: #5D4050 !important; font-family: 'Helvetica', sans-serif; }
-        
-        /* Abas */
         .stTabs [data-baseweb="tab-list"] { gap: 8px; }
-        .stTabs [data-baseweb="tab"] {
-            height: 40px; white-space: pre-wrap; background-color: rgba(255,255,255,0.5);
-            border-radius: 4px 4px 0px 0px; gap: 1px; padding-top: 10px; padding-bottom: 10px;
-        }
+        .stTabs [data-baseweb="tab"] { height: 40px; background-color: rgba(255,255,255,0.5); border-radius: 4px 4px 0px 0px; }
         .stTabs [aria-selected="true"] { background-color: #FFFFFF; border-bottom: 2px solid #9A2A5A; color: #9A2A5A; }
-
-        /* Ticket Visual */
-        .ticket {
-            background-color: white; border: 1px dashed #9A2A5A; padding: 20px;
-            border-radius: 10px; margin-top: 20px; text-align: center;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-        }
-        .anamnese-header {
-            color: #9A2A5A; font-weight: 700; margin-top: 20px; margin-bottom: 8px; 
-            border-left: 5px solid #9A2A5A; padding-left: 10px; background-color: rgba(255,255,255,0.5);
-        }
+        .ticket { background-color: white; border: 1px dashed #9A2A5A; padding: 20px; border-radius: 10px; margin-top: 20px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .anamnese-header { color: #9A2A5A; font-weight: 700; margin-top: 20px; margin-bottom: 8px; border-left: 5px solid #9A2A5A; padding-left: 10px; background-color: rgba(255,255,255,0.5); }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 4. CONEXÃO GOOGLE SHEETS (USANDO O LINK PARA NÃO DAR ERRO) ---
+# --- 4. CONEXÃO GOOGLE SHEETS (VIA ID) ---
 
 @st.cache_resource
 def get_gspread_client():
-    """Autentica no Google e mantém o cliente em cache"""
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        
         if "gcp_service_account" not in st.secrets:
             st.error("⚠️ Segredo 'gcp_service_account' não encontrado.")
             return None
-
         creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
-        client = gspread.authorize(creds)
-        return client
+        return gspread.authorize(creds)
     except Exception as e:
         st.error(f"❌ Erro Técnico na Autenticação: {e}")
         return None
 
 def conectar_google_sheets():
-    """Abre a planilha usando o URL direto"""
     client = get_gspread_client()
     if client is None: return None
-    
     try:
-        # AQUI É A MÁGICA: Abre pelo LINK, não pelo nome. Infalível.
-        if "docs.google.com" in SHEET_URL:
-            return client.open_by_url(SHEET_URL).sheet1
-        else:
-            return client.open("Agenda Dra Thais").sheet1
+        # AQUI MUDOU: Usa open_by_key (infalível se tiver permissão)
+        return client.open_by_key(SHEET_ID).sheet1
     except Exception as e:
+        # Se der erro, mostra o detalhe técnico para sabermos se é 403 (permissão) ou 404 (não achou)
         st.sidebar.error(f"❌ Erro ao abrir planilha: {e}")
         return None
 
 def carregar_dados_gs():
-    """Baixa dados e garante que o DataFrame tenha colunas"""
     sheet = conectar_google_sheets()
     if sheet is None: return pd.DataFrame()
-        
     try:
         data = sheet.get_all_records()
         df = pd.DataFrame(data)
@@ -120,10 +70,8 @@ def carregar_dados_gs():
     except: return pd.DataFrame()
 
 def salvar_agendamento(nome, tel, data, hora, serv, anam):
-    """Salva no Sheets"""
     sheet = conectar_google_sheets()
     if sheet is None: return "Erro de Conexão com Planilha"
-        
     try:
         data_br = data.strftime("%d/%m/%Y")
         agora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
@@ -132,7 +80,6 @@ def salvar_agendamento(nome, tel, data, hora, serv, anam):
     except Exception as e: return f"Erro ao gravar: {e}"
 
 def get_horarios_ocupados(data_desejada):
-    """Verifica horários ocupados"""
     df = carregar_dados_gs()
     if df.empty: return []
     try:
@@ -165,15 +112,17 @@ def ir_para(pagina): st.session_state.pagina = pagina
 with st.sidebar:
     st.header("🔧 Admin")
     
-    # Teste de Conexão
     if st.button("Testar Conexão"):
         client = get_gspread_client()
         if client:
             try:
-                sheet = client.open_by_url(SHEET_URL).sheet1
+                # Tenta abrir pelo ID fixo
+                sheet = client.open_by_key(SHEET_ID).sheet1
                 st.success(f"✅ Conectado: {sheet.title}")
             except Exception as e:
-                st.error(f"❌ Erro de URL: {e}")
+                # Mostra o tipo de erro (ex: PermissionDenied, SpreadsheetNotFound)
+                st.error(f"❌ Erro: {type(e).__name__}")
+                st.error(f"Detalhe: {e}")
         else:
             st.error("Erro nos Segredos")
     
@@ -181,7 +130,7 @@ with st.sidebar:
     if st.text_input("Senha", type="password") == "admin123":
         if st.button("Painel"): ir_para('admin_panel')
 
-# TELA: HOME
+# HOME
 if st.session_state.pagina == 'home':
     st.write(""); c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
@@ -194,7 +143,7 @@ if st.session_state.pagina == 'home':
     if st.button("📂  MINHAS RESERVAS", type="secondary", use_container_width=True): ir_para('reservas')
     st.markdown("<div style='margin-top: 60px; text-align: center; color: #999; font-size: 12px;'><p>📍 Taubaté/SP | CRO 12345</p></div>", unsafe_allow_html=True)
 
-# TELA: AGENDAR
+# AGENDAR
 elif st.session_state.pagina == 'agendar':
     if st.button("⬅ Voltar"): ir_para('home'); st.rerun()
     st.markdown("<h2 style='color:#9A2A5A;'>Ficha do Paciente</h2>", unsafe_allow_html=True)
@@ -264,20 +213,18 @@ elif st.session_state.pagina == 'agendar':
                     time.sleep(10); ir_para('home'); st.rerun()
                 else: msg.error(res)
 
-# TELA: RESERVAS
+# RESERVAS
 elif st.session_state.pagina == 'reservas':
     if st.button("⬅ Voltar"): ir_para('home'); st.rerun()
-    st.markdown("<h3 style='color:#9A2A5A'>Minhas Reservas</h3>", unsafe_allow_html=True)
     tel_busca = st.text_input("Seu WhatsApp")
     if st.button("🔎 Buscar"):
         df = buscar_agendamentos_cliente(tel_busca)
         if not df.empty: st.dataframe(df, hide_index=True, use_container_width=True)
         else: st.warning("Nada encontrado.")
 
-# TELA: ADMIN
+# ADMIN
 elif st.session_state.pagina == 'admin_panel':
     if st.button("⬅ Sair"): ir_para('home'); st.rerun()
-    st.title("Painel da Dra. Thais")
     df = carregar_dados_gs()
     if not df.empty: st.dataframe(df, use_container_width=True)
     else: st.info("Vazio.")
