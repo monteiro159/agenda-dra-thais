@@ -9,8 +9,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 # --- 1. CONFIGURAÇÃO INICIAL ---
 st.set_page_config(page_title="Dra. Thais Milene", page_icon="🦷", layout="centered", initial_sidebar_state="collapsed")
 
-# --- 2. CONFIGURAÇÃO DA PLANILHA (USANDO ID - MAIS SEGURO) ---
-# Em vez do link inteiro, usamos só o código ID da planilha
+# --- 2. CONFIGURAÇÃO DA PLANILHA ---
 SHEET_ID = "16YOR1odJ11iiUUI_y62FKb7GotQSRZeu64qP6RwZXrU"
 
 # --- 3. ESTILO VISUAL ---
@@ -32,7 +31,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 4. CONEXÃO GOOGLE SHEETS (VIA ID) ---
+# --- 4. CONEXÃO GOOGLE SHEETS ---
 
 @st.cache_resource
 def get_gspread_client():
@@ -51,10 +50,8 @@ def conectar_google_sheets():
     client = get_gspread_client()
     if client is None: return None
     try:
-        # AQUI MUDOU: Usa open_by_key (infalível se tiver permissão)
         return client.open_by_key(SHEET_ID).sheet1
     except Exception as e:
-        # Se der erro, mostra o detalhe técnico para sabermos se é 403 (permissão) ou 404 (não achou)
         st.sidebar.error(f"❌ Erro ao abrir planilha: {e}")
         return None
 
@@ -115,14 +112,20 @@ with st.sidebar:
     if st.button("Testar Conexão"):
         client = get_gspread_client()
         if client:
+            # MOSTRA O EMAIL QUE ESTÁ SENDO USADO
+            email_robo = st.secrets["gcp_service_account"]["client_email"]
+            st.info(f"🤖 Email do Robô:")
+            st.code(email_robo)
+            st.warning("⚠️ Copie o email acima e garanta que ele está no botão 'Compartilhar' da planilha como Editor.")
+            
             try:
-                # Tenta abrir pelo ID fixo
                 sheet = client.open_by_key(SHEET_ID).sheet1
                 st.success(f"✅ Conectado: {sheet.title}")
             except Exception as e:
-                # Mostra o tipo de erro (ex: PermissionDenied, SpreadsheetNotFound)
                 st.error(f"❌ Erro: {type(e).__name__}")
                 st.error(f"Detalhe: {e}")
+                if "Permission" in str(e):
+                    st.error("Dica: Ative a 'Google Drive API' no console do Google Cloud.")
         else:
             st.error("Erro nos Segredos")
     
