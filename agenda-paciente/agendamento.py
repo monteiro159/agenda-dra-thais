@@ -10,6 +10,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 st.set_page_config(page_title="Dra. Thais Milene", page_icon="🦷", layout="centered", initial_sidebar_state="collapsed")
 
 # --- 2. CONFIGURAÇÃO DA PLANILHA ---
+# ID da planilha (o código no meio do link)
 SHEET_ID = "16YOR1odJ11iiUUI_y62FKb7GotQSRZeu64qP6RwZXrU"
 
 # --- 3. ESTILO VISUAL ---
@@ -112,23 +113,33 @@ with st.sidebar:
     if st.button("Testar Conexão"):
         client = get_gspread_client()
         if client:
-            # MOSTRA O EMAIL QUE ESTÁ SENDO USADO
             email_robo = st.secrets["gcp_service_account"]["client_email"]
-            st.info(f"🤖 Email do Robô:")
-            st.code(email_robo)
-            st.warning("⚠️ Copie o email acima e garanta que ele está no botão 'Compartilhar' da planilha como Editor.")
+            st.info(f"🤖 Email do Robô: {email_robo}")
             
             try:
                 sheet = client.open_by_key(SHEET_ID).sheet1
                 st.success(f"✅ Conectado: {sheet.title}")
             except Exception as e:
-                st.error(f"❌ Erro: {type(e).__name__}")
-                st.error(f"Detalhe: {e}")
-                if "Permission" in str(e):
-                    st.error("Dica: Ative a 'Google Drive API' no console do Google Cloud.")
-        else:
-            st.error("Erro nos Segredos")
-    
+                st.error(f"❌ Erro de Permissão!")
+                st.warning("Verifique se ativou a 'Google Drive API' no console.")
+                
+    # NOVO BOTÃO TIRA-TEIMA
+    if st.button("📂 Listar o que o Robô vê"):
+        client = get_gspread_client()
+        if client:
+            try:
+                # Tenta listar todas as planilhas que o robô tem acesso
+                planilhas = client.openall()
+                if not planilhas:
+                    st.warning("📭 O Robô não vê NENHUMA planilha. O compartilhamento falhou.")
+                else:
+                    st.success(f"O Robô vê {len(planilhas)} planilhas:")
+                    for p in planilhas:
+                        st.code(f"{p.title} (ID: {p.id})")
+            except Exception as e:
+                st.error(f"❌ Erro ao listar: {e}")
+                st.error("Isso confirma que a 'Google Drive API' está desligada.")
+
     st.write("---")
     if st.text_input("Senha", type="password") == "admin123":
         if st.button("Painel"): ir_para('admin_panel')
