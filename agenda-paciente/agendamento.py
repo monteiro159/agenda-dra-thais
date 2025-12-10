@@ -5,12 +5,14 @@ import time
 import re
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 # --- 1. CONFIGURAÇÃO INICIAL ---
 st.set_page_config(page_title="Dra. Thais Milene", page_icon="🦷", layout="centered", initial_sidebar_state="collapsed")
 
 # --- 2. CONFIGURAÇÃO DA PLANILHA ---
-# ID da planilha (o código no meio do link)
 SHEET_ID = "16YOR1odJ11iiUUI_y62FKb7GotQSRZeu64qP6RwZXrU"
 
 # --- 3. ESTILO VISUAL ---
@@ -29,10 +31,62 @@ st.markdown("""
         .stTabs [aria-selected="true"] { background-color: #FFFFFF; border-bottom: 2px solid #9A2A5A; color: #9A2A5A; }
         .ticket { background-color: white; border: 1px dashed #9A2A5A; padding: 20px; border-radius: 10px; margin-top: 20px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
         .anamnese-header { color: #9A2A5A; font-weight: 700; margin-top: 20px; margin-bottom: 8px; border-left: 5px solid #9A2A5A; padding-left: 10px; background-color: rgba(255,255,255,0.5); }
+        .login-box { background-color: #FFFFFF; padding: 15px; border-radius: 10px; border: 1px solid #E3CWD8; margin-bottom: 20px; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 4. CONEXÃO GOOGLE SHEETS ---
+# --- 4. FUNÇÕES DE EMAIL ---
+def enviar_email_confirmacao(nome_paciente, email_paciente, data, hora, servico):
+    if "email" not in st.secrets:
+        return # Se não configurou segredo, ignora silenciosamente
+        
+    remetente = st.secrets["email"]["usuario"]
+    senha = st.secrets["email"]["senha"]
+    
+    # Email para o Paciente
+    msg = MIMEMultipart()
+    msg['From'] = remetente
+    msg['To'] = email_paciente
+    msg['Subject'] = f"Confirmação: {servico} com Dra. Thais"
+    
+    corpo = f"""
+    Olá {nome_paciente},
+    
+    Seu agendamento está confirmado!
+    
+    📅 Data: {data}
+    ⏰ Horário: {hora}
+    🦷 Procedimento: {servico}
+    📍 Local: Taubaté/SP
+    
+    Caso precise reagendar, por favor nos avise pelo WhatsApp.
+    
+    Atenciosamente,
+    Equipe Dra. Thais Milene
+    """
+    msg.attach(MIMEText(corpo, 'plain'))
+    
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(remetente, senha)
+        server.send_message(msg)
+        
+        # Email Cópia para Dra (Opcional - envia para o próprio remetente)
+        msg_dra = MIMEMultipart()
+        msg_dra['From'] = remetente
+        msg_dra['To'] = remetente
+        msg_dra['Subject'] = f"🔔 Novo Agendamento: {nome_paciente}"
+        msg_dra.attach(MIMEText(f"Novo paciente agendado:\nNome: {nome_paciente}\nTel: {email_paciente}\nData: {data} - {hora}", 'plain'))
+        server.send_message(msg_dra)
+        
+        server.quit()
+        return True
+    except Exception as e:
+        print(f"Erro email: {e}")
+        return False
+
+# --- 5. CONEXÃO GOOGLE SHEETS ---
 
 @st.cache_resource
 def get_gspread_client():
@@ -62,18 +116,25 @@ def carregar_dados_gs():
     try:
         data = sheet.get_all_records()
         df = pd.DataFrame(data)
-        colunas = ['Nome', 'Telefone', 'Data', 'Horario', 'Servico', 'Anamnese', 'Timestamp']
+        # Atualizado com coluna Email
+        colunas = ['Nome', 'Telefone', 'Email', 'Data', 'Horario', 'Servico', 'Anamnese', 'Timestamp']
         if df.empty: return pd.DataFrame(columns=colunas)
         return df
     except: return pd.DataFrame()
 
-def salvar_agendamento(nome, tel, data, hora, serv, anam):
+def salvar_agendamento(nome, tel, email, data, hora, serv, anam):
     sheet = conectar_google_sheets()
     if sheet is None: return "Erro de Conexão com Planilha"
     try:
         data_br = data.strftime("%d/%m/%Y")
         agora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        sheet.append_row([str(nome), str(tel), str(data_br), str(hora), str(serv), str(anam), str(agora)])
+        # Atualizado ordem com Email
+        sheet.append_row([str(nome), str(tel), str(email), str(data_br), str(hora), str(serv), str(anam), str(agora)])
+        
+        # Tenta enviar email (não bloqueia se falhar)
+        if email and "@" in email:
+            enviar_email_confirmacao(nome, email, data_br, hora, serv)
+            
         return "OK"
     except Exception as e: return f"Erro ao gravar: {e}"
 
@@ -86,6 +147,25 @@ def get_horarios_ocupados(data_desejada):
         data_iso = str(data_desejada)
         return df[(df['Data'] == data_br) | (df['Data'] == data_iso)]['Horario'].tolist()
     except: return []
+
+def buscar_paciente_login(dado_busca):
+    df = carregar_dados_gs()
+    if df.empty: return None
+    
+    dado_limpo = re.sub(r'\D', '', dado_busca) # Remove tudo que não é numero
+    
+    # Tenta buscar por telefone (limpando a coluna da planilha também)
+    if 'Telefone' in df.columns:
+        df['tel_temp'] = df['Telefone'].astype(str).apply(lambda x: re.sub(r'\D', '', x))
+        resultado = df[df['tel_temp'] == dado_limpo]
+        if not resultado.empty: return resultado.iloc[-1] # Retorna o mais recente
+        
+    # Se não achou, tenta por email (sem limpar regex)
+    if 'Email' in df.columns:
+        resultado = df[df['Email'].astype(str).str.lower() == dado_busca.lower()]
+        if not resultado.empty: return resultado.iloc[-1]
+        
+    return None
 
 def buscar_agendamentos_cliente(telefone):
     df = carregar_dados_gs()
@@ -102,44 +182,27 @@ def formatar_telefone(tel):
     if len(nums) == 10: return f"({nums[:2]}) {nums[2:6]}-{nums[6:]}"
     return tel
 
-# --- 5. LÓGICA DO SITE ---
+# --- 6. LÓGICA DO SITE ---
 if 'pagina' not in st.session_state: st.session_state.pagina = 'home'
 def ir_para(pagina): st.session_state.pagina = pagina
 
-# SIDEBAR: Diagnóstico e Admin
+# Inicializa variaveis de preenchimento automatico
+if 'pre_nome' not in st.session_state: st.session_state.pre_nome = ""
+if 'pre_tel' not in st.session_state: st.session_state.pre_tel = ""
+if 'pre_email' not in st.session_state: st.session_state.pre_email = ""
+
+# SIDEBAR
 with st.sidebar:
     st.header("🔧 Admin")
-    
     if st.button("Testar Conexão"):
         client = get_gspread_client()
         if client:
-            email_robo = st.secrets["gcp_service_account"]["client_email"]
-            st.info(f"🤖 Email do Robô: {email_robo}")
-            
             try:
                 sheet = client.open_by_key(SHEET_ID).sheet1
                 st.success(f"✅ Conectado: {sheet.title}")
             except Exception as e:
-                st.error(f"❌ Erro de Permissão!")
-                st.warning("Verifique se ativou a 'Google Drive API' no console.")
-                
-    # NOVO BOTÃO TIRA-TEIMA
-    if st.button("📂 Listar o que o Robô vê"):
-        client = get_gspread_client()
-        if client:
-            try:
-                # Tenta listar todas as planilhas que o robô tem acesso
-                planilhas = client.openall()
-                if not planilhas:
-                    st.warning("📭 O Robô não vê NENHUMA planilha. O compartilhamento falhou.")
-                else:
-                    st.success(f"O Robô vê {len(planilhas)} planilhas:")
-                    for p in planilhas:
-                        st.code(f"{p.title} (ID: {p.id})")
-            except Exception as e:
-                st.error(f"❌ Erro ao listar: {e}")
-                st.error("Isso confirma que a 'Google Drive API' está desligada.")
-
+                st.error(f"❌ Erro: {e}")
+        else: st.error("Erro Secrets")
     st.write("---")
     if st.text_input("Senha", type="password") == "admin123":
         if st.button("Painel"): ir_para('admin_panel')
@@ -161,6 +224,32 @@ if st.session_state.pagina == 'home':
 elif st.session_state.pagina == 'agendar':
     if st.button("⬅ Voltar"): ir_para('home'); st.rerun()
     st.markdown("<h2 style='color:#9A2A5A;'>Ficha do Paciente</h2>", unsafe_allow_html=True)
+    
+    # --- ÁREA DE LOGIN / JÁ SOU PACIENTE ---
+    with st.expander("👋 Já possui cadastro? Clique aqui!"):
+        st.markdown("<div class='login-box'>", unsafe_allow_html=True)
+        c_login1, c_login2 = st.columns([3, 1])
+        with c_login1:
+            busca_input = st.text_input("Digite seu Celular ou E-mail:", placeholder="Ex: 12999999999")
+        with c_login2:
+            st.write("")
+            st.write("")
+            btn_buscar = st.button("🔍 Buscar")
+        
+        if btn_buscar:
+            paciente_enc = buscar_paciente_login(busca_input)
+            if paciente_enc is not None:
+                st.session_state.pre_nome = paciente_enc['Nome']
+                st.session_state.pre_tel = paciente_enc['Telefone']
+                # Tenta pegar email se existir, senao vazio
+                st.session_state.pre_email = paciente_enc.get('Email', '') 
+                st.success(f"Bem-vindo(a) de volta, {paciente_enc['Nome']}!")
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.warning("Cadastro não encontrado. Preencha abaixo.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
     msg = st.container()
     
     with st.form("form_anamnese"):
@@ -179,8 +268,13 @@ elif st.session_state.pagina == 'agendar':
         if not livres and data_agend.weekday() < 5: st.warning("Dia lotado.")
 
         st.markdown("<div class='anamnese-header'>2. Seus Dados</div>", unsafe_allow_html=True)
-        nome = st.text_input("👤 Nome Completo")
-        tel = st.text_input("📱 WhatsApp (DDD+Número)")
+        # Campos preenchidos automaticamente se encontrados
+        nome = st.text_input("👤 Nome Completo", value=st.session_state.pre_nome)
+        c_contato1, c_contato2 = st.columns(2)
+        with c_contato1:
+            tel = st.text_input("📱 WhatsApp (DDD+Número)", value=st.session_state.pre_tel, placeholder="Ex: 12999999999")
+        with c_contato2:
+            email = st.text_input("📧 E-mail (Opcional)", value=st.session_state.pre_email, placeholder="Para receber confirmação")
         
         st.markdown("**🎂 Data de Nascimento**")
         d1, d2, d3 = st.columns([3, 5, 4], gap="small")
@@ -218,12 +312,20 @@ elif st.session_state.pagina == 'agendar':
                 saude = f"Diabetes:{diabetes}, Hiper:{hiper}, Card:{cardiaco}, Gest:{gest}, Alergia:{alergia}"
                 ficha = f"[PERFIL] {idade}a | {genero}\n[QUEIXA] {queixa}\n[SAUDE] {saude}\n[REMEDIO] {remedio}"
                 
-                res = salvar_agendamento(nome, formatar_telefone(tel_clean), data_agend, hora, servico, ficha)
+                # Salvando com E-mail
+                res = salvar_agendamento(nome, formatar_telefone(tel_clean), email, data_agend, hora, servico, ficha)
+                
                 if res == "OK":
                     st.balloons()
                     msg_zap = f"Olá! Agendei {servico} dia {data_agend.strftime('%d/%m')} às {hora}."
-                    st.markdown(f'<div class="ticket">✅ Confirmado!<br>{nome}<br>{data_agend.strftime("%d/%m")} - {hora}</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="ticket">✅ Confirmado!<br>{nome}<br>{data_agend.strftime("%d/%m")} - {hora}<br><small>Verifique seu e-mail!</small></div>', unsafe_allow_html=True)
                     st.markdown(f'<a href="https://wa.me/5512987054320?text={msg_zap}" target="_blank" class="big-button" style="background:#25D366; height:60px; font-size:16px;">📲 ENVIAR WHATSAPP</a>', unsafe_allow_html=True)
+                    
+                    # Limpa sessão para próximo
+                    st.session_state.pre_nome = ""
+                    st.session_state.pre_tel = ""
+                    st.session_state.pre_email = ""
+                    
                     time.sleep(10); ir_para('home'); st.rerun()
                 else: msg.error(res)
 
