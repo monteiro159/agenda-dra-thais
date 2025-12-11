@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime, date
 import time
 import re
+import os # Importante para achar os arquivos
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import smtplib
@@ -11,6 +12,14 @@ from email.mime.multipart import MIMEMultipart
 
 # --- 1. CONFIGURAÇÃO INICIAL ---
 st.set_page_config(page_title="Dra. Thais Milene", page_icon="🦷", layout="centered", initial_sidebar_state="collapsed")
+
+# --- GPS DE ARQUIVOS (CORREÇÃO DAS IMAGENS) ---
+# Descobre onde este arquivo (agendamento.py) está no computador/nuvem
+PASTA_ATUAL = os.path.dirname(os.path.abspath(__file__))
+
+# Cria o caminho exato para as imagens
+CAMINHO_LOGO = os.path.join(PASTA_ATUAL, "logo.jpg")
+CAMINHO_DRA = os.path.join(PASTA_ATUAL, "dra.jpg")
 
 # --- 2. CONFIGURAÇÃO DA PLANILHA ---
 SHEET_ID = "16YOR1odJ11iiUUI_y62FKb7GotQSRZeu64qP6RwZXrU"
@@ -21,101 +30,58 @@ st.markdown("""
         /* Fundo Geral */
         .stApp { background-color: #F0E4E6; }
         
-        /* --- ESTILO PERFIL (NOVO) --- */
-        .profile-container {
-            text-align: center;
-            margin-bottom: 30px;
-        }
+        /* --- ESTILO PERFIL --- */
+        .profile-container { text-align: center; margin-bottom: 30px; }
         .profile-pic {
-            width: 150px;
-            height: 150px;
-            border-radius: 50%; /* Faz ficar redondo */
-            object-fit: cover; /* Ajusta a foto dentro do circulo */
-            border: 4px solid #D8A7B1; /* Borda Rose */
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            margin-bottom: 15px;
-        }
-        .brand-logo {
-            max-width: 120px;
-            margin-top: -10px;
-            margin-bottom: 10px;
-            opacity: 0.8;
+            width: 150px; height: 150px; border-radius: 50%; 
+            object-fit: cover; border: 4px solid #D8A7B1; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); margin-bottom: 15px;
         }
         
-        /* -- ESTILIZAÇÃO DOS BOTÕES -- */
+        /* -- BOTÕES -- */
         div[data-testid="stButton"] button[kind="primary"], 
         div[data-testid="stLinkButton"] a[kind="primary"] { 
-            background-color: #D8A7B1 !important; 
-            color: white !important; 
-            border: none !important;
-            border-radius: 12px !important; 
-            height: 60px !important; 
-            font-size: 18px !important;
-            font-weight: 600 !important;
-            box-shadow: 0 4px 10px rgba(216, 167, 177, 0.3) !important;
-            transition: all 0.3s ease !important;
-            width: 100% !important;
-            display: flex !important; align-items: center !important; justify-content: center !important;
+            background-color: #D8A7B1 !important; color: white !important; border: none !important;
+            border-radius: 12px !important; height: 60px !important; font-size: 18px !important;
+            font-weight: 600 !important; box-shadow: 0 4px 10px rgba(216, 167, 177, 0.3) !important;
+            width: 100% !important; display: flex !important; align-items: center !important; justify-content: center !important;
         }
         
         div[data-testid="stButton"] button[kind="secondary"], 
         div[data-testid="stLinkButton"] a[kind="secondary"] { 
-            background-color: #FFFFFF !important; 
-            color: #2F2F33 !important; 
-            border: 1px solid #E6E6E8 !important; 
-            border-radius: 12px !important; 
-            height: 60px !important; 
-            font-size: 16px !important;
-            font-weight: 500 !important;
+            background-color: #FFFFFF !important; color: #2F2F33 !important; 
+            border: 1px solid #E6E6E8 !important; border-radius: 12px !important; 
+            height: 60px !important; font-size: 16px !important; font-weight: 500 !important;
             box-shadow: 0 2px 5px rgba(0,0,0,0.02) !important;
-            transition: all 0.3s ease !important;
-            width: 100% !important;
-            display: flex !important; align-items: center !important; justify-content: center !important;
+            width: 100% !important; display: flex !important; align-items: center !important; justify-content: center !important;
         }
         
         div[data-testid="stButton"] button:hover, div[data-testid="stLinkButton"] a:hover { 
-            transform: translateY(-2px); 
-            border-color: #D8A7B1 !important; 
-            color: #D8A7B1 !important;
-            box-shadow: 0 4px 12px rgba(216, 167, 177, 0.2) !important;
+            transform: translateY(-2px); border-color: #D8A7B1 !important; 
+            color: #D8A7B1 !important; box-shadow: 0 4px 12px rgba(216, 167, 177, 0.2) !important;
         }
 
-        /* Inputs Clean */
+        /* Inputs */
         .stTextInput input, .stSelectbox div[data-baseweb="select"] div, .stDateInput input, .stTextArea textarea { 
-            background-color: #FFFFFF !important; 
-            border: 1px solid #E6E6E8 !important; 
-            border-radius: 10px !important; 
-            color: #2F2F33 !important; padding-left: 12px;
+            background-color: #FFFFFF !important; border: 1px solid #E6E6E8 !important; 
+            border-radius: 10px !important; color: #2F2F33 !important; padding-left: 12px;
         }
         .stTextInput input:focus, .stSelectbox div:focus, .stDateInput input:focus { 
             border-color: #D8A7B1 !important; box-shadow: 0 0 0 2px rgba(216, 167, 177, 0.2) !important; 
         }
         
-        /* Tipografia */
-        h1, h2, h3 { color: #2F2F33 !important; font-family: 'Helvetica Neue', sans-serif; font-weight: 600; }
-        p, label, .stMarkdown { color: #2F2F33 !important; font-family: 'Helvetica', sans-serif; }
-        .stCaption { color: #7A7A7C !important; }
-        
-        /* Abas */
+        h1, h2, h3, p, label, .stMarkdown { color: #2F2F33 !important; font-family: 'Helvetica', sans-serif; }
         .stTabs [data-baseweb="tab-list"] { gap: 5px; }
         .stTabs [data-baseweb="tab"] { height: 45px; background-color: rgba(255,255,255,0.5); border-radius: 8px 8px 0px 0px; }
         .stTabs [aria-selected="true"] { background-color: #FFFFFF; border-bottom: 3px solid #D8A7B1; color: #2F2F33; font-weight: bold; }
-
-        /* Ticket */
         .ticket { background-color: white; border: 1px solid #C9B49A; padding: 30px; border-radius: 12px; margin-top: 20px; text-align: center; position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.03); }
         .ticket::before { content: "✦"; color: #C9B49A; font-size: 20px; position: absolute; top: 10px; left: 50%; transform: translateX(-50%); }
-        
-        /* Cabeçalhos */
         .section-header { color: #2F2F33; font-size: 1.1em; font-weight: 600; margin-top: 25px; margin-bottom: 15px; border-left: 4px solid #D8A7B1; padding-left: 15px; background: linear-gradient(90deg, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0) 100%); padding-top: 8px; padding-bottom: 8px; border-radius: 0 8px 8px 0; }
         .login-box { background-color: #FFFFFF; padding: 20px; border-radius: 12px; border: 1px solid #E6E6E8; margin-bottom: 25px; box-shadow: 0 4px 12px rgba(0,0,0,0.02); }
-        
-        /* Social Icons */
         .social-footer { text-align: center; margin-top: 40px; }
         .social-footer a { margin: 0 10px; text-decoration: none; font-size: 24px; color: #7A7A7C; transition: color 0.3s; }
         .social-footer a:hover { color: #D8A7B1; }
         a { text-decoration: none; }
-        
-        /* Ocultar labels de imagens para layout limpo */
         [data-testid="stImage"] { margin: 0 auto; }
     </style>
 """, unsafe_allow_html=True)
@@ -243,28 +209,22 @@ with st.sidebar:
     if st.text_input("Senha", type="password") == "admin123":
         if st.button("Painel"): ir_para('admin_panel')
 
-# --- TELA 1: HOME (LINKTREE COM PERFIL) ---
+# --- TELA 1: HOME (COM CAMINHO CORRIGIDO DAS IMAGENS) ---
 if st.session_state.pagina == 'home':
     st.write("")
     
-    # LAYOUT DE PERFIL (FOTO REDONDA + NOME + LOGO)
-    # Importante: Precisamos usar HTML para fazer a foto redonda e estilizada
-    # Certifique-se de que os arquivos 'dra.jpg' e 'logo.jpg' estão na pasta
-    
-    # Codifica imagens em base64 ou usa o st.image normal com truque de layout
-    # Vamos usar colunas para centralizar
-    
     col_perfil_esq, col_perfil_meio, col_perfil_dir = st.columns([1, 2, 1])
     with col_perfil_meio:
-        # Tenta carregar a imagem da Dra com a classe CSS de perfil
         try:
-            # Mostra a imagem com st.image, mas o CSS .stImage img vai arredondar se aplicarmos a classe certa
-            # Como Streamlit bloqueia classes diretas, usamos HTML puro para o topo
-            # Mas imagens locais em HTML puro no Streamlit Cloud podem quebrar se não forem url publica.
-            # Vamos usar a abordagem híbrida:
+            # TENTA CARREGAR USANDO O CAMINHO EXATO
+            # Se a imagem existe no disco, isso vai funcionar
+            if os.path.exists(CAMINHO_DRA):
+                st.image(CAMINHO_DRA, width=160)
+            else:
+                # Se não achar o arquivo, avisa
+                st.warning("Arquivo 'dra.jpg' não encontrado na pasta.")
             
-            st.image("dra.jpg", width=160) # O CSS abaixo vai tentar arredondar qualquer imagem de 160px
-            # Hack de CSS específico para essa imagem
+            # Hack de CSS para deixar redondo
             st.markdown("""
                 <style>
                     div[data-testid="stImage"] img {
@@ -276,15 +236,14 @@ if st.session_state.pagina == 'home':
                 </style>
             """, unsafe_allow_html=True)
         except:
-            st.warning("Adicione 'dra.jpg' ao GitHub")
+            st.error("Erro ao carregar imagem")
 
         st.markdown("<h2 style='text-align:center; color:#2F2F33; margin-bottom:5px'>Dra. Thais Milene</h2>", unsafe_allow_html=True)
         
-        # Logo menor embaixo
         try:
-            st.image("logo.jpg", width=100) # Logo pequeno
-        except:
-            pass
+            if os.path.exists(CAMINHO_LOGO):
+                st.image(CAMINHO_LOGO, width=100)
+        except: pass
 
     st.markdown("<h5 style='text-align:center; color:#7A7A7C; font-weight:normal; margin-bottom: 30px;'>Harmonização Orofacial & Odontologia</h5>", unsafe_allow_html=True)
     
