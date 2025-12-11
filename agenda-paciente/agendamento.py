@@ -38,7 +38,7 @@ def get_img_as_base64(path):
         return base64.b64encode(data).decode()
     except: return None
 
-# --- 3. ESTILO VISUAL (ROSE PREMIUM + ÍCONES DO RODAPÉ) ---
+# --- 3. ESTILO VISUAL (ROSE PREMIUM + CORREÇÃO DE LINKS) ---
 st.markdown("""
     <style>
         /* Fundo Geral */
@@ -60,10 +60,38 @@ st.markdown("""
         div[data-testid="stButton"] button[kind="primary"] { background-color: #D8A7B1 !important; color: white !important; border: none; border-radius: 12px; height: 60px; font-size: 18px; font-weight: 600; box-shadow: 0 4px 10px rgba(216, 167, 177, 0.3); width: 100%; }
         div[data-testid="stButton"] button[kind="secondary"] { background-color: #FFFFFF !important; color: #2F2F33 !important; border: 1px solid #E6E6E8; border-radius: 12px; height: 60px; font-size: 16px; font-weight: 500; width: 100%; }
         
-        /* Links Personalizados */
-        .custom-link-btn { display: flex; align-items: center; justify-content: center; width: 100%; height: 60px; background-color: #FFFFFF; color: #2F2F33; border: 1px solid #E6E6E8; border-radius: 12px; text-decoration: none; font-size: 16px; font-weight: 500; box-shadow: 0 2px 5px rgba(0,0,0,0.02); transition: all 0.3s ease; margin-bottom: 15px; }
-        .custom-link-btn:hover { transform: translateY(-2px); border-color: #D8A7B1; color: #D8A7B1; box-shadow: 0 4px 12px rgba(216, 167, 177, 0.2); }
-        .btn-icon { width: 24px; height: 24px; margin-right: 12px; fill: currentColor; }
+        /* Links Personalizados (FIX DO AZUL) */
+        a.custom-link-btn { 
+            display: flex !important; 
+            align-items: center !important; 
+            justify-content: center !important; 
+            width: 100% !important; 
+            height: 60px !important; 
+            background-color: #FFFFFF !important; 
+            color: #2F2F33 !important; /* Grafite - Tira o Azul */
+            border: 1px solid #E6E6E8 !important; 
+            border-radius: 12px !important; 
+            text-decoration: none !important; /* Tira o sublinhado */
+            font-size: 16px !important; 
+            font-weight: 500 !important; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.02) !important; 
+            transition: all 0.3s ease !important; 
+            margin-bottom: 15px !important; 
+        }
+        a.custom-link-btn:hover { 
+            transform: translateY(-2px); 
+            border-color: #D8A7B1 !important; 
+            color: #D8A7B1 !important; /* Rose no Hover */
+            box-shadow: 0 4px 12px rgba(216, 167, 177, 0.2) !important; 
+        }
+        /* Garante que o ícone mude de cor junto com o texto */
+        a.custom-link-btn svg {
+            fill: currentColor !important;
+            transition: fill 0.3s ease !important;
+        }
+        
+        /* Ícones dentro dos botões */
+        .btn-icon { width: 24px; height: 24px; margin-right: 12px; }
 
         /* Inputs */
         .stTextInput input, .stSelectbox div[data-baseweb="select"] div, .stDateInput input, .stTextArea textarea { background-color: #FFFFFF !important; border: 1px solid #E6E6E8 !important; border-radius: 10px !important; color: #2F2F33 !important; padding-left: 12px; }
@@ -80,7 +108,9 @@ st.markdown("""
         .login-box { background-color: #FFFFFF; padding: 20px; border-radius: 12px; border: 1px solid #E6E6E8; margin-bottom: 25px; box-shadow: 0 4px 12px rgba(0,0,0,0.02); }
         .ticket { background-color: white; border: 1px solid #C9B49A; padding: 30px; border-radius: 12px; margin-top: 20px; text-align: center; position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.03); }
         .ticket::before { content: "✦"; color: #C9B49A; font-size: 20px; position: absolute; top: 10px; left: 50%; transform: translateX(-50%); }
-        
+        .social-footer { text-align: center; margin-top: 40px; }
+        .social-footer a { margin: 0 10px; text-decoration: none; font-size: 24px; color: #7A7A7C; transition: color 0.3s; }
+        .social-footer a:hover { color: #D8A7B1; }
         .header-container { display: flex; justify-content: center; align-items: center; gap: 20px; margin-bottom: 20px; margin-top: 10px; }
         .header-dra { width: 120px; height: 120px; border-radius: 50%; border: 3px solid #D8A7B1; object-fit: cover; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         .header-logo { width: 120px; height: auto; object-fit: contain; }
@@ -263,11 +293,15 @@ if st.session_state.pagina == 'home':
         
     st.write("") 
 
-    # BOTÕES DE LINK COM ÍCONES
+    # BOTÕES DE LINK COM ÍCONES (COR DO SITE)
     st.markdown("""
     <a href="https://wa.me/5512997997515" class="custom-link-btn" target="_blank">
         <svg class="btn-icon" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
         Falar no WhatsApp
+    </a>
+    <a href="https://www.google.com/maps/search/?api=1&query=Taubaté+SP" class="custom-link-btn" target="_blank">
+        <svg class="btn-icon" viewBox="0 0 24 24"><path d="M12 0c-4.198 0-8 3.403-8 7.602 0 4.198 3.469 9.21 8 16.398 4.531-7.188 8-12.2 8-16.398 0-4.199-3.801-7.602-8-7.602zm0 11c-1.657 0-3-1.343-3-3s1.343-3 3-3 3 1.343 3 3-1.343 3-3 3z"/></svg>
+        Localização (Maps)
     </a>
     <a href="https://www.instagram.com/dra_thaism?igsh=MTBkeTVkZTZzMTR6eA==" class="custom-link-btn" target="_blank">
         <svg class="btn-icon" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
@@ -370,9 +404,9 @@ elif st.session_state.pagina == 'agendar':
 elif st.session_state.pagina == 'reservas':
     if st.button("⬅ Voltar"): ir_para('home'); st.rerun()
     st.markdown("<h3 style='color:#2F2F33'>Minhas Reservas</h3>", unsafe_allow_html=True)
-    t_busca = st.text_input("Seu WhatsApp")
+    t = st.text_input("Seu WhatsApp")
     if st.button("🔎 Buscar"):
-        df = buscar_agendamentos_cliente(t_busca)
+        df = buscar_agendamentos_cliente(t)
         if not df.empty: st.dataframe(df, hide_index=True, use_container_width=True)
         else: st.warning("Nada encontrado.")
 
