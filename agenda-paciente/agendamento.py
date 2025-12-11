@@ -15,15 +15,34 @@ st.set_page_config(page_title="Dra. Thais Milene", page_icon="🦷", layout="cen
 # --- 2. CONFIGURAÇÃO DA PLANILHA ---
 SHEET_ID = "16YOR1odJ11iiUUI_y62FKb7GotQSRZeu64qP6RwZXrU"
 
-# --- 3. ESTILO VISUAL (ROSE PREMIUM + LINKTREE) ---
+# --- 3. ESTILO VISUAL (ROSE PREMIUM + PERFIL) ---
 st.markdown("""
     <style>
         /* Fundo Geral */
         .stApp { background-color: #F0E4E6; }
         
-        /* -- ESTILIZAÇÃO DOS BOTÕES (PADRÃO UNIFICADO) -- */
+        /* --- ESTILO PERFIL (NOVO) --- */
+        .profile-container {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .profile-pic {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%; /* Faz ficar redondo */
+            object-fit: cover; /* Ajusta a foto dentro do circulo */
+            border: 4px solid #D8A7B1; /* Borda Rose */
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            margin-bottom: 15px;
+        }
+        .brand-logo {
+            max-width: 120px;
+            margin-top: -10px;
+            margin-bottom: 10px;
+            opacity: 0.8;
+        }
         
-        /* Botão Primário (Destaque Sólido) */
+        /* -- ESTILIZAÇÃO DOS BOTÕES -- */
         div[data-testid="stButton"] button[kind="primary"], 
         div[data-testid="stLinkButton"] a[kind="primary"] { 
             background-color: #D8A7B1 !important; 
@@ -39,12 +58,11 @@ st.markdown("""
             display: flex !important; align-items: center !important; justify-content: center !important;
         }
         
-        /* Botão Secundário (Fundo Branco - Estilo Card) */
         div[data-testid="stButton"] button[kind="secondary"], 
         div[data-testid="stLinkButton"] a[kind="secondary"] { 
             background-color: #FFFFFF !important; 
-            color: #2F2F33 !important; /* Grafite */
-            border: 1px solid #E6E6E8 !important; /* Borda sutil */
+            color: #2F2F33 !important; 
+            border: 1px solid #E6E6E8 !important; 
             border-radius: 12px !important; 
             height: 60px !important; 
             font-size: 16px !important;
@@ -55,7 +73,6 @@ st.markdown("""
             display: flex !important; align-items: center !important; justify-content: center !important;
         }
         
-        /* Efeito Hover (Passar o mouse) */
         div[data-testid="stButton"] button:hover, div[data-testid="stLinkButton"] a:hover { 
             transform: translateY(-2px); 
             border-color: #D8A7B1 !important; 
@@ -71,8 +88,7 @@ st.markdown("""
             color: #2F2F33 !important; padding-left: 12px;
         }
         .stTextInput input:focus, .stSelectbox div:focus, .stDateInput input:focus { 
-            border-color: #D8A7B1 !important; 
-            box-shadow: 0 0 0 2px rgba(216, 167, 177, 0.2) !important; 
+            border-color: #D8A7B1 !important; box-shadow: 0 0 0 2px rgba(216, 167, 177, 0.2) !important; 
         }
         
         /* Tipografia */
@@ -93,12 +109,14 @@ st.markdown("""
         .section-header { color: #2F2F33; font-size: 1.1em; font-weight: 600; margin-top: 25px; margin-bottom: 15px; border-left: 4px solid #D8A7B1; padding-left: 15px; background: linear-gradient(90deg, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0) 100%); padding-top: 8px; padding-bottom: 8px; border-radius: 0 8px 8px 0; }
         .login-box { background-color: #FFFFFF; padding: 20px; border-radius: 12px; border: 1px solid #E6E6E8; margin-bottom: 25px; box-shadow: 0 4px 12px rgba(0,0,0,0.02); }
         
-        /* Social Icons Footer */
+        /* Social Icons */
         .social-footer { text-align: center; margin-top: 40px; }
         .social-footer a { margin: 0 10px; text-decoration: none; font-size: 24px; color: #7A7A7C; transition: color 0.3s; }
         .social-footer a:hover { color: #D8A7B1; }
-        
         a { text-decoration: none; }
+        
+        /* Ocultar labels de imagens para layout limpo */
+        [data-testid="stImage"] { margin: 0 auto; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -225,46 +243,73 @@ with st.sidebar:
     if st.text_input("Senha", type="password") == "admin123":
         if st.button("Painel"): ir_para('admin_panel')
 
-# --- TELA 1: HOME (LINKTREE STYLE) ---
+# --- TELA 1: HOME (LINKTREE COM PERFIL) ---
 if st.session_state.pagina == 'home':
-    st.write(""); c1, c2, c3 = st.columns([1, 2, 1])
-    with c2: 
-        try: st.image("logo.jpg", use_container_width=True)
-        except: st.markdown("<h1 style='text-align:center; color:#D8A7B1'>Dra. Thais</h1>", unsafe_allow_html=True)
-    st.markdown("<h5 style='text-align:center; color:#7A7A7C; font-weight:normal; margin-top:-10px; margin-bottom: 30px;'>Odontologia Especializada</h5>", unsafe_allow_html=True)
+    st.write("")
     
-    # LISTA DE BOTÕES (MENU)
-    # 1. Agendar (Destaque Rose)
+    # LAYOUT DE PERFIL (FOTO REDONDA + NOME + LOGO)
+    # Importante: Precisamos usar HTML para fazer a foto redonda e estilizada
+    # Certifique-se de que os arquivos 'dra.jpg' e 'logo.jpg' estão na pasta
+    
+    # Codifica imagens em base64 ou usa o st.image normal com truque de layout
+    # Vamos usar colunas para centralizar
+    
+    col_perfil_esq, col_perfil_meio, col_perfil_dir = st.columns([1, 2, 1])
+    with col_perfil_meio:
+        # Tenta carregar a imagem da Dra com a classe CSS de perfil
+        try:
+            # Mostra a imagem com st.image, mas o CSS .stImage img vai arredondar se aplicarmos a classe certa
+            # Como Streamlit bloqueia classes diretas, usamos HTML puro para o topo
+            # Mas imagens locais em HTML puro no Streamlit Cloud podem quebrar se não forem url publica.
+            # Vamos usar a abordagem híbrida:
+            
+            st.image("dra.jpg", width=160) # O CSS abaixo vai tentar arredondar qualquer imagem de 160px
+            # Hack de CSS específico para essa imagem
+            st.markdown("""
+                <style>
+                    div[data-testid="stImage"] img {
+                        border-radius: 50%;
+                        border: 4px solid #D8A7B1;
+                        object-fit: cover;
+                        aspect-ratio: 1 / 1;
+                    }
+                </style>
+            """, unsafe_allow_html=True)
+        except:
+            st.warning("Adicione 'dra.jpg' ao GitHub")
+
+        st.markdown("<h2 style='text-align:center; color:#2F2F33; margin-bottom:5px'>Dra. Thais Milene</h2>", unsafe_allow_html=True)
+        
+        # Logo menor embaixo
+        try:
+            st.image("logo.jpg", width=100) # Logo pequeno
+        except:
+            pass
+
+    st.markdown("<h5 style='text-align:center; color:#7A7A7C; font-weight:normal; margin-bottom: 30px;'>Harmonização Orofacial & Odontologia</h5>", unsafe_allow_html=True)
+    
+    # LISTA DE BOTÕES
     if st.button("✨ Agende sua Consulta", type="primary", use_container_width=True): 
         ir_para('agendar')
     
-    st.write("") # Espaçamento
+    st.write("") 
     
-    # 2. Reservas (Branco Clean)
     if st.button("📂 Minhas Reservas", type="secondary", use_container_width=True): 
         ir_para('reservas')
         
     st.write("") 
 
-    # 3. WhatsApp (Link Externo)
     st.link_button("💬 Falar no WhatsApp", "https://wa.me/5512997997515", type="secondary", use_container_width=True)
-    
     st.write("")
-
-    # 4. Localização
     st.link_button("📍 Localização (Maps)", "https://www.google.com/maps/search/?api=1&query=Taubaté+SP", type="secondary", use_container_width=True)
-    
     st.write("")
-
-    # 5. Instagram (Atualizado com link real)
     st.link_button("📷 Nosso Instagram", "https://www.instagram.com/dra_thaism?igsh=MTBkeTVkZTZzMTR6eA==", type="secondary", use_container_width=True)
 
-    # Rodapé Social (Atualizado)
+    # Rodapé Social
     st.markdown("""
         <div class="social-footer">
             <a href="https://www.instagram.com/dra_thaism?igsh=MTBkeTVkZTZzMTR6eA==" target="_blank">📷</a>
             <a href="https://wa.me/5512997997515" target="_blank">💬</a>
-            <a href="mailto:contato@drathais.com" target="_blank">✉️</a>
         </div>
         <div style='margin-top: 20px; text-align: center; color: #7A7A7C; font-size: 12px;'>
             <p>Taubaté/SP | CRO 12345<br>© 2025 Dra. Thais Milene</p>
@@ -337,7 +382,7 @@ elif st.session_state.pagina == 'agendar':
                 if res=="OK":
                     st.balloons()
                     msg_zap = f"Olá! Agendei {serv} dia {dt.strftime('%d/%m')} às {hr}."
-                    st.markdown(f'<div class="ticket">✅ Confirmado!<br><b>{nome}</b><br>{dt.strftime("%d/%m")} - {hr}</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="ticket">✅ Confirmado!<br><b>{nome}</b><br>{dt.strftime("%d/%m")} - {hr}<br><small>Verifique seu e-mail!</small></div>', unsafe_allow_html=True)
                     st.markdown(f'<a href="https://wa.me/5512997997515?text={msg_zap}" target="_blank" class="big-button" style="background:#25D366;height:60px;font-size:16px;margin-top:10px;">📲 ENVIAR WHATSAPP</a>', unsafe_allow_html=True)
                     st.session_state.pre_nome="";st.session_state.pre_tel="";st.session_state.pre_email=""
                     time.sleep(10); ir_para('home'); st.rerun()
