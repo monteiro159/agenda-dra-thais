@@ -13,37 +13,116 @@ from email.mime.multipart import MIMEMultipart
 st.set_page_config(page_title="Dra. Thais Milene", page_icon="🦷", layout="centered", initial_sidebar_state="collapsed")
 
 # --- 2. CONFIGURAÇÃO DA PLANILHA ---
+# ID da planilha (o código no meio do link)
 SHEET_ID = "16YOR1odJ11iiUUI_y62FKb7GotQSRZeu64qP6RwZXrU"
 
-# --- 3. ESTILO VISUAL ---
+# --- 3. ESTILO VISUAL (NOVA PALETA PREMIUM) ---
 st.markdown("""
     <style>
-        .stApp { background-color: #FCEEF5; }
-        .big-button { width: 100%; height: 120px; border-radius: 20px; color: white; font-size: 20px; font-weight: bold; cursor: pointer; margin-bottom: 15px; display: flex; align-items: center; justify-content: center; text-decoration: none; transition: transform 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-        .big-button:hover { transform: scale(1.02); }
-        div[data-testid="stButton"] button[kind="primary"] { background-color: #9A2A5A; color: white !important; border: none; border-radius: 12px; height: 50px; font-size: 16px; }
-        div[data-testid="stButton"] button[kind="secondary"] { background-color: #FFFFFF; color: #9A2A5A !important; border: 1px solid #F3D0DE; border-radius: 12px; height: 50px; font-size: 16px; }
-        .stTextInput input, .stSelectbox div[data-baseweb="select"] div, .stDateInput input, .stTextArea textarea { background-color: #FFFFFF !important; border: 1px solid #E3CWD8 !important; border-radius: 12px !important; color: #495057 !important; padding-left: 10px; }
-        .stTextInput input:focus, .stSelectbox div:focus, .stDateInput input:focus { border-color: #9A2A5A !important; box-shadow: 0 0 0 1px #9A2A5A !important; }
-        h1, h2, h3, p, label, .stMarkdown { color: #5D4050 !important; font-family: 'Helvetica', sans-serif; }
+        /* Fundo Rose Neutro / Pó */
+        .stApp { background-color: #F0E4E6; }
+        
+        /* Botões Estilo Card */
+        .big-button { 
+            width: 100%; height: 120px; border-radius: 15px; 
+            color: white; font-size: 20px; font-weight: 600; 
+            cursor: pointer; margin-bottom: 15px; display: flex; 
+            align-items: center; justify-content: center; text-decoration: none; 
+            transition: transform 0.2s, box-shadow 0.2s; 
+            box-shadow: 0 4px 20px rgba(216, 167, 177, 0.25); /* Sombra suave Rose */
+            background-color: #D8A7B1; /* Rose Principal */
+        }
+        .big-button:hover { transform: translateY(-2px); box-shadow: 0 6px 25px rgba(216, 167, 177, 0.4); }
+
+        /* Botões Padrão Streamlit */
+        div[data-testid="stButton"] button { border-radius: 8px; height: 50px; font-weight: 500; border: none; letter-spacing: 0.5px; }
+        
+        /* Botão Primário (Rose Principal) */
+        div[data-testid="stButton"] button[kind="primary"] { 
+            background-color: #D8A7B1; color: white !important; font-size: 16px; 
+            box-shadow: 0 4px 10px rgba(216, 167, 177, 0.3);
+        }
+        div[data-testid="stButton"] button[kind="primary"]:hover { background-color: #C08E98; }
+        
+        /* Botão Secundário (Clean) */
+        div[data-testid="stButton"] button[kind="secondary"] { 
+            background-color: #FFFFFF; color: #2F2F33 !important; /* Grafite */
+            border: 1px solid #E6E6E8; /* Cinza Clean */
+            font-size: 16px; 
+        }
+        div[data-testid="stButton"] button[kind="secondary"]:hover { border-color: #D8A7B1; color: #D8A7B1 !important; }
+
+        /* Inputs Modernos & Clean */
+        .stTextInput input, .stSelectbox div[data-baseweb="select"] div, .stDateInput input, .stTextArea textarea { 
+            background-color: #FFFFFF !important; 
+            border: 1px solid #E6E6E8 !important; /* Cinza Clean */
+            border-radius: 8px !important; 
+            color: #2F2F33 !important; /* Grafite */
+            padding-left: 12px;
+        }
+        /* Foco com Dourado Desaturado ou Rose */
+        .stTextInput input:focus, .stSelectbox div:focus, .stDateInput input:focus { 
+            border-color: #D8A7B1 !important; 
+            box-shadow: 0 0 0 1px #D8A7B1 !important; 
+        }
+        
+        /* Tipografia */
+        h1, h2, h3 { color: #2F2F33 !important; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-weight: 600; }
+        p, label, .stMarkdown { color: #2F2F33 !important; font-family: 'Helvetica', sans-serif; }
+        .stCaption { color: #7A7A7C !important; } /* Cinza Médio */
+        
+        /* Abas Elegantes */
         .stTabs [data-baseweb="tab-list"] { gap: 8px; }
-        .stTabs [data-baseweb="tab"] { height: 40px; background-color: rgba(255,255,255,0.5); border-radius: 4px 4px 0px 0px; }
-        .stTabs [aria-selected="true"] { background-color: #FFFFFF; border-bottom: 2px solid #9A2A5A; color: #9A2A5A; }
-        .ticket { background-color: white; border: 1px dashed #9A2A5A; padding: 20px; border-radius: 10px; margin-top: 20px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
-        .anamnese-header { color: #9A2A5A; font-weight: 700; margin-top: 20px; margin-bottom: 8px; border-left: 5px solid #9A2A5A; padding-left: 10px; background-color: rgba(255,255,255,0.5); }
-        .login-box { background-color: #FFFFFF; padding: 15px; border-radius: 10px; border: 1px solid #E3CWD8; margin-bottom: 20px; }
+        .stTabs [data-baseweb="tab"] { 
+            height: 45px; background-color: rgba(255,255,255,0.6); 
+            border-radius: 8px 8px 0px 0px; border: none; color: #7A7A7C;
+        }
+        .stTabs [aria-selected="true"] { 
+            background-color: #FFFFFF; 
+            border-bottom: 3px solid #D8A7B1; /* Rose Principal */
+            color: #2F2F33; font-weight: bold;
+        }
+
+        /* Ticket Premium com Dourado */
+        .ticket { 
+            background-color: white; 
+            border: 1px dashed #C9B49A; /* Dourado Desaturado */
+            padding: 25px; border-radius: 12px; margin-top: 25px; 
+            text-align: center; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.03); 
+        }
+        
+        /* Cabeçalhos de Seção */
+        .anamnese-header { 
+            color: #2F2F33; /* Grafite */
+            font-weight: 600; margin-top: 25px; margin-bottom: 12px; 
+            border-left: 4px solid #D8A7B1; /* Rose Principal */
+            padding-left: 15px; 
+            background: linear-gradient(90deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0) 100%);
+            padding-top: 5px; padding-bottom: 5px; 
+        }
+        
+        .login-box { 
+            background-color: #FFFFFF; padding: 20px; border-radius: 12px; 
+            border: 1px solid #E6E6E8; margin-bottom: 25px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+        }
+        
+        /* Checkbox Moderno */
+        .stCheckbox label span { color: #2F2F33; }
+        
+        /* Ajuste link whatsapp */
+        a { text-decoration: none; }
     </style>
 """, unsafe_allow_html=True)
 
 # --- 4. FUNÇÕES DE EMAIL ---
 def enviar_email_confirmacao(nome_paciente, email_paciente, data, hora, servico):
-    if "email" not in st.secrets:
-        return # Se não configurou segredo, ignora silenciosamente
+    if "email" not in st.secrets: return
         
     remetente = st.secrets["email"]["usuario"]
     senha = st.secrets["email"]["senha"]
     
-    # Email para o Paciente
     msg = MIMEMultipart()
     msg['From'] = remetente
     msg['To'] = email_paciente
@@ -52,14 +131,14 @@ def enviar_email_confirmacao(nome_paciente, email_paciente, data, hora, servico)
     corpo = f"""
     Olá {nome_paciente},
     
-    Seu agendamento está confirmado!
+    Seu agendamento está confirmado.
     
     📅 Data: {data}
     ⏰ Horário: {hora}
     🦷 Procedimento: {servico}
     📍 Local: Taubaté/SP
     
-    Caso precise reagendar, por favor nos avise pelo WhatsApp.
+    Caso precise reagendar, por favor nos avise.
     
     Atenciosamente,
     Equipe Dra. Thais Milene
@@ -72,14 +151,12 @@ def enviar_email_confirmacao(nome_paciente, email_paciente, data, hora, servico)
         server.login(remetente, senha)
         server.send_message(msg)
         
-        # Email Cópia para Dra (Opcional - envia para o próprio remetente)
         msg_dra = MIMEMultipart()
         msg_dra['From'] = remetente
         msg_dra['To'] = remetente
         msg_dra['Subject'] = f"🔔 Novo Agendamento: {nome_paciente}"
         msg_dra.attach(MIMEText(f"Novo paciente agendado:\nNome: {nome_paciente}\nTel: {email_paciente}\nData: {data} - {hora}", 'plain'))
         server.send_message(msg_dra)
-        
         server.quit()
         return True
     except Exception as e:
@@ -116,7 +193,6 @@ def carregar_dados_gs():
     try:
         data = sheet.get_all_records()
         df = pd.DataFrame(data)
-        # Atualizado com coluna Email
         colunas = ['Nome', 'Telefone', 'Email', 'Data', 'Horario', 'Servico', 'Anamnese', 'Timestamp']
         if df.empty: return pd.DataFrame(columns=colunas)
         return df
@@ -128,10 +204,8 @@ def salvar_agendamento(nome, tel, email, data, hora, serv, anam):
     try:
         data_br = data.strftime("%d/%m/%Y")
         agora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        # Atualizado ordem com Email
         sheet.append_row([str(nome), str(tel), str(email), str(data_br), str(hora), str(serv), str(anam), str(agora)])
         
-        # Tenta enviar email (não bloqueia se falhar)
         if email and "@" in email:
             enviar_email_confirmacao(nome, email, data_br, hora, serv)
             
@@ -152,15 +226,13 @@ def buscar_paciente_login(dado_busca):
     df = carregar_dados_gs()
     if df.empty: return None
     
-    dado_limpo = re.sub(r'\D', '', dado_busca) # Remove tudo que não é numero
+    dado_limpo = re.sub(r'\D', '', dado_busca)
     
-    # Tenta buscar por telefone (limpando a coluna da planilha também)
     if 'Telefone' in df.columns:
         df['tel_temp'] = df['Telefone'].astype(str).apply(lambda x: re.sub(r'\D', '', x))
         resultado = df[df['tel_temp'] == dado_limpo]
-        if not resultado.empty: return resultado.iloc[-1] # Retorna o mais recente
+        if not resultado.empty: return resultado.iloc[-1]
         
-    # Se não achou, tenta por email (sem limpar regex)
     if 'Email' in df.columns:
         resultado = df[df['Email'].astype(str).str.lower() == dado_busca.lower()]
         if not resultado.empty: return resultado.iloc[-1]
@@ -186,7 +258,6 @@ def formatar_telefone(tel):
 if 'pagina' not in st.session_state: st.session_state.pagina = 'home'
 def ir_para(pagina): st.session_state.pagina = pagina
 
-# Inicializa variaveis de preenchimento automatico
 if 'pre_nome' not in st.session_state: st.session_state.pre_nome = ""
 if 'pre_tel' not in st.session_state: st.session_state.pre_tel = ""
 if 'pre_email' not in st.session_state: st.session_state.pre_email = ""
@@ -212,20 +283,19 @@ if st.session_state.pagina == 'home':
     st.write(""); c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
         try: st.image("logo.jpg", use_container_width=True)
-        except: st.markdown("<h1 style='text-align:center; color:#9A2A5A'>Dra. Thais</h1>", unsafe_allow_html=True)
-    st.markdown("<h5 style='text-align:center; color:#8C6B7A; font-weight:normal; margin-top:-15px'>Odontologia Especializada</h5>", unsafe_allow_html=True)
+        except: st.markdown("<h1 style='text-align:center; color:#2F2F33'>Dra. Thais</h1>", unsafe_allow_html=True)
+    st.markdown("<h5 style='text-align:center; color:#7A7A7C; font-weight:normal; margin-top:-15px'>Odontologia Especializada</h5>", unsafe_allow_html=True)
     st.write("---")
     if st.button("✨  NOVO AGENDAMENTO", type="primary", use_container_width=True): ir_para('agendar')
     st.write("")
     if st.button("📂  MINHAS RESERVAS", type="secondary", use_container_width=True): ir_para('reservas')
-    st.markdown("<div style='margin-top: 60px; text-align: center; color: #999; font-size: 12px;'><p>📍 Taubaté/SP | CRO 12345</p></div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-top: 60px; text-align: center; color: #7A7A7C; font-size: 12px;'><p>📍 Taubaté/SP | CRO 12345</p></div>", unsafe_allow_html=True)
 
 # AGENDAR
 elif st.session_state.pagina == 'agendar':
     if st.button("⬅ Voltar"): ir_para('home'); st.rerun()
-    st.markdown("<h2 style='color:#9A2A5A;'>Ficha do Paciente</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#2F2F33;'>Ficha do Paciente</h2>", unsafe_allow_html=True)
     
-    # --- ÁREA DE LOGIN / JÁ SOU PACIENTE ---
     with st.expander("👋 Já possui cadastro? Clique aqui!"):
         st.markdown("<div class='login-box'>", unsafe_allow_html=True)
         c_login1, c_login2 = st.columns([3, 1])
@@ -241,13 +311,11 @@ elif st.session_state.pagina == 'agendar':
             if paciente_enc is not None:
                 st.session_state.pre_nome = paciente_enc['Nome']
                 st.session_state.pre_tel = paciente_enc['Telefone']
-                # Tenta pegar email se existir, senao vazio
                 st.session_state.pre_email = paciente_enc.get('Email', '') 
                 st.success(f"Bem-vindo(a) de volta, {paciente_enc['Nome']}!")
-                time.sleep(1)
-                st.rerun()
+                time.sleep(1); st.rerun()
             else:
-                st.warning("Cadastro não encontrado. Preencha abaixo.")
+                st.warning("Cadastro não encontrado.")
         st.markdown("</div>", unsafe_allow_html=True)
 
     msg = st.container()
@@ -268,13 +336,10 @@ elif st.session_state.pagina == 'agendar':
         if not livres and data_agend.weekday() < 5: st.warning("Dia lotado.")
 
         st.markdown("<div class='anamnese-header'>2. Seus Dados</div>", unsafe_allow_html=True)
-        # Campos preenchidos automaticamente se encontrados
         nome = st.text_input("👤 Nome Completo", value=st.session_state.pre_nome)
         c_contato1, c_contato2 = st.columns(2)
-        with c_contato1:
-            tel = st.text_input("📱 WhatsApp (DDD+Número)", value=st.session_state.pre_tel, placeholder="Ex: 12999999999")
-        with c_contato2:
-            email = st.text_input("📧 E-mail (Opcional)", value=st.session_state.pre_email, placeholder="Para receber confirmação")
+        with c_contato1: tel = st.text_input("📱 WhatsApp (DDD+Número)", value=st.session_state.pre_tel)
+        with c_contato2: email = st.text_input("📧 E-mail (Opcional)", value=st.session_state.pre_email)
         
         st.markdown("**🎂 Data de Nascimento**")
         d1, d2, d3 = st.columns([3, 5, 4], gap="small")
@@ -312,7 +377,6 @@ elif st.session_state.pagina == 'agendar':
                 saude = f"Diabetes:{diabetes}, Hiper:{hiper}, Card:{cardiaco}, Gest:{gest}, Alergia:{alergia}"
                 ficha = f"[PERFIL] {idade}a | {genero}\n[QUEIXA] {queixa}\n[SAUDE] {saude}\n[REMEDIO] {remedio}"
                 
-                # Salvando com E-mail
                 res = salvar_agendamento(nome, formatar_telefone(tel_clean), email, data_agend, hora, servico, ficha)
                 
                 if res == "OK":
@@ -321,7 +385,6 @@ elif st.session_state.pagina == 'agendar':
                     st.markdown(f'<div class="ticket">✅ Confirmado!<br>{nome}<br>{data_agend.strftime("%d/%m")} - {hora}<br><small>Verifique seu e-mail!</small></div>', unsafe_allow_html=True)
                     st.markdown(f'<a href="https://wa.me/5512987054320?text={msg_zap}" target="_blank" class="big-button" style="background:#25D366; height:60px; font-size:16px;">📲 ENVIAR WHATSAPP</a>', unsafe_allow_html=True)
                     
-                    # Limpa sessão para próximo
                     st.session_state.pre_nome = ""
                     st.session_state.pre_tel = ""
                     st.session_state.pre_email = ""
