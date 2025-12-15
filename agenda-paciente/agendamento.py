@@ -6,7 +6,7 @@ import re
 import os
 import base64
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2 import service_account # NOVA BIBLIOTECA DE AUTENTICAÇÃO
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -97,7 +97,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 4. CREDENCIAIS ---
+# --- 4. CREDENCIAIS MODERNAS (GOOGLE AUTH) ---
 @st.cache_resource
 def get_credentials():
     try:
@@ -107,8 +107,12 @@ def get_credentials():
             "https://www.googleapis.com/auth/calendar"
         ]
         if "gcp_service_account" not in st.secrets:
-            st.error("⚠️ Segredos não encontrados."); return None
-        return ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
+            return None
+        
+        creds = service_account.Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"], scopes=scope
+        )
+        return creds
     except: return None
 
 # --- 5. INTEGRAÇÕES ---
