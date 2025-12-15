@@ -11,16 +11,19 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-# TENTA IMPORTAR A BIBLIOTECA DO CALENDÁRIO
+# --- TENTATIVA DE IMPORTAR CALENDAR (COM AVISO VISUAL) ---
 try:
     from googleapiclient.discovery import build
     CALENDAR_AVAILABLE = True
 except ImportError:
     CALENDAR_AVAILABLE = False
-    print("⚠️ Biblioteca do Google Calendar não encontrada. Adicione 'google-api-python-client' ao requirements.txt")
 
 # --- 1. CONFIGURAÇÃO INICIAL ---
 st.set_page_config(page_title="Dra. Thais Milene", page_icon="🦷", layout="centered", initial_sidebar_state="collapsed")
+
+# AVISO DE DEBUG SE FALTAR BIBLIOTECA (SÓ APARECE SE DER ERRO)
+if not CALENDAR_AVAILABLE:
+    st.warning("⚠️ Atenção: A biblioteca do Google Calendar não foi carregada. Verifique se 'google-api-python-client' está no requirements.txt e reinicie o app.")
 
 # --- 2. CONFIGURAÇÃO ---
 SHEET_ID = "16YOR1odJ11iiUUI_y62FKb7GotQSRZeu64qP6RwZXrU"
@@ -52,7 +55,6 @@ st.markdown("""
     <style>
         .stApp { background-color: #F0E4E6; }
         
-        /* Esconder Menus */
         #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
         div[data-testid="stToolbar"] {visibility: hidden; height: 0%; position: fixed;}
         div[data-testid="stDecoration"] {visibility: hidden; height: 0%;}
@@ -95,7 +97,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 4. CREDENCIAIS UNIFICADAS ---
+# --- 4. CREDENCIAIS ---
 @st.cache_resource
 def get_credentials():
     try:
@@ -120,14 +122,13 @@ def conectar_google_sheets():
 
 def adicionar_ao_calendar(nome, tel, data_obj, hora_str, servico):
     if not CALENDAR_AVAILABLE:
-        return "Biblioteca 'googleapiclient' não instalada. Verifique requirements.txt"
+        return "Erro: Biblioteca Calendar ausente."
         
     creds = get_credentials()
     if not creds: return "Erro Credenciais"
     
     try:
         service = build('calendar', 'v3', credentials=creds)
-        
         start_time = f"{data_obj.strftime('%Y-%m-%d')}T{hora_str}:00"
         end_time_obj = datetime.strptime(start_time, "%Y-%m-%dT%H:%M:%S") + timedelta(hours=1)
         end_time = end_time_obj.strftime("%Y-%m-%dT%H:%M:%S")
@@ -162,7 +163,6 @@ def enviar_email(nome, email, data, hora, serv):
         server.login(remetente, st.secrets["email"]["senha"])
         server.send_message(msg)
         
-        # Cópia para Dra
         msg_dra = MIMEMultipart()
         msg_dra['From'] = remetente
         msg_dra['To'] = CALENDAR_ID
@@ -194,7 +194,6 @@ def salvar_agendamento(nome, tel, email, data, hora, serv, anam):
         
         if email and "@" in email: enviar_email(nome, email, data_br, hora, serv)
         
-        # Tenta Agenda (Se falhar, não trava)
         res_cal = adicionar_ao_calendar(nome, tel, data, hora, serv)
         if res_cal != "OK": print(f"Aviso Calendar: {res_cal}")
             
@@ -209,16 +208,30 @@ def get_horarios_ocupados(data_desejada):
         return df[df['Data'].isin([data_desejada.strftime("%d/%m/%Y"), str(data_desejada)])]['Horario'].tolist()
     except: return []
 
+# --- BUSCA INTELIGENTE (NOME, TEL OU EMAIL) ---
 def buscar_paciente_login(dado_busca):
     df = carregar_dados_gs()
     if df.empty: return None
-    limpo = re.sub(r'\D', '', dado_busca)
-    if 'Telefone' in df.columns:
-        res = df[df['Telefone'].astype(str).apply(lambda x: re.sub(r'\D', '', x)) == limpo]
+    
+    dado_str = str(dado_busca).strip()
+    
+    # 1. Busca por Telefone (se for só numeros)
+    dado_limpo_tel = re.sub(r'\D', '', dado_str)
+    if dado_limpo_tel and len(dado_limpo_tel) >= 8 and 'Telefone' in df.columns:
+         df['tel_temp'] = df['Telefone'].astype(str).apply(lambda x: re.sub(r'\D', '', x))
+         res = df[df['tel_temp'] == dado_limpo_tel]
+         if not res.empty: return res.iloc[-1]
+
+    # 2. Busca por Email
+    if '@' in dado_str and 'Email' in df.columns:
+        res = df[df['Email'].astype(str).str.lower() == dado_str.lower()]
         if not res.empty: return res.iloc[-1]
-    if 'Email' in df.columns:
-        res = df[df['Email'].astype(str).str.lower() == dado_busca.lower()]
+
+    # 3. Busca por Nome (Contém)
+    if 'Nome' in df.columns:
+        res = df[df['Nome'].astype(str).str.lower().str.contains(dado_str.lower(), na=False)]
         if not res.empty: return res.iloc[-1]
+
     return None
 
 def buscar_agendamentos_cliente(t):
@@ -258,7 +271,9 @@ with st.sidebar:
                 # Teste de Agenda
                 res = adicionar_ao_calendar("Teste", "00", datetime.now(), "08:00", "Teste Site")
                 if res == "OK": st.success("✅ Agenda Google OK")
-                else: st.error(f"❌ Falha Agenda: {res}")
+                else: 
+                    st.error(f"❌ Falha Agenda: {res}")
+                    if "403" in str(res): st.info("Dica: Permissão de 'Alterar Eventos' no Calendar.")
 
 # --- TELA 1: HOME ---
 if st.session_state.pagina == 'home':
@@ -273,8 +288,7 @@ if st.session_state.pagina == 'home':
                 <img src="data:image/jpeg;base64,{logo_b64}" class="header-logo">
             </div>
         """, unsafe_allow_html=True)
-    else: st.warning("Imagens não encontradas.")
-
+    
     st.markdown("<h2 style='text-align:center; color:#2F2F33; margin-top:-10px; margin-bottom:5px'>Dra. Thais Milene</h2>", unsafe_allow_html=True)
     st.markdown("<h5 style='text-align:center; color:#7A7A7C; font-weight:normal; margin-bottom: 30px;'>Harmonização Orofacial & Odontologia</h5>", unsafe_allow_html=True)
     
@@ -286,25 +300,14 @@ if st.session_state.pagina == 'home':
     st.markdown("""
     <a href="https://wa.me/5512997997515" class="custom-link-btn" target="_blank"><svg class="btn-icon" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>Falar no WhatsApp</a>
     <a href="https://www.google.com/maps/search/?api=1&query=Taubaté+SP" class="custom-link-btn" target="_blank"><svg class="btn-icon" viewBox="0 0 24 24"><path d="M12 0c-4.198 0-8 3.403-8 7.602 0 4.198 3.469 9.21 8 16.398 4.531-7.188 8-12.2 8-16.398 0-4.199-3.801-7.602-8-7.602zm0 11c-1.657 0-3-1.343-3-3s1.343-3 3-3 3 1.343 3 3-1.343 3-3 3z"/></svg>Localização (Maps)</a>
-    <a href="https://www.instagram.com/dra_thaism?igsh=MTBkeTVkZTZzMTR6eA==" class="custom-link-btn" target="_blank"><svg class="btn-icon" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
-        Nosso Instagram
-    </a>
+    <a href="https://www.instagram.com/dra_thaism?igsh=MTBkeTVkZTZzMTR6eA==" class="custom-link-btn" target="_blank"><svg class="btn-icon" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>Nosso Instagram</a>
     """, unsafe_allow_html=True)
 
     st.markdown("""
         <div class="social-footer">
-            <a href="https://www.instagram.com/dra_thaism?igsh=MTBkeTVkZTZzMTR6eA==" target="_blank" title="Instagram">
-                <svg class="social-icon" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
-            </a>
-            <a href="https://wa.me/5512997997515" target="_blank" title="WhatsApp">
-                <svg class="social-icon" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
-            </a>
-            <a href="#" title="Site da Clínica (Em breve)">
-                <svg class="social-icon" viewBox="0 0 24 24"><path d="M12 0c-4.198 0-8 3.403-8 7.602 0 4.198 3.469 9.21 8 16.398 4.531-7.188 8-12.2 8-16.398 0-4.199-3.801-7.602-8-7.602zm0 11c-1.657 0-3-1.343-3-3s1.343-3 3-3 3 1.343 3 3-1.343 3-3 3z"/></svg>
-            </a>
-            <a href="#" title="YouTube (Em breve)">
-                <svg class="social-icon" viewBox="0 0 24 24"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-            </a>
+            <a href="https://www.instagram.com/dra_thaism?igsh=MTBkeTVkZTZzMTR6eA==" target="_blank" title="Instagram"><svg class="social-icon" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg></a>
+            <a href="#" title="Site"><svg class="social-icon" viewBox="0 0 24 24"><path d="M12 0c-4.198 0-8 3.403-8 7.602 0 4.198 3.469 9.21 8 16.398 4.531-7.188 8-12.2 8-16.398 0-4.199-3.801-7.602-8-7.602zm0 11c-1.657 0-3-1.343-3-3s1.343-3 3-3 3 1.343 3 3-1.343 3-3 3z"/></svg></a>
+            <a href="#" title="YouTube"><svg class="social-icon" viewBox="0 0 24 24"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg></a>
         </div>
         <div style='margin-top: 20px; text-align: center; color: #7A7A7C; font-size: 12px;'>
             <p>Taubaté/SP | CRO 12345<br>© 2025 Dra. Thais Milene</p>
