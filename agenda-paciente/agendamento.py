@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, date
+from datetime import datetime, timedelta, date
 import time
 import re
 import os
@@ -10,14 +10,16 @@ from oauth2client.service_account import ServiceAccountCredentials
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from googleapiclient.discovery import build # Biblioteca do Calendar
 
 # --- 1. CONFIGURAÇÃO INICIAL ---
 st.set_page_config(page_title="Dra. Thais Milene", page_icon="🦷", layout="centered", initial_sidebar_state="collapsed")
 
-# --- 2. CONFIGURAÇÃO DA PLANILHA ---
+# --- 2. DADOS DE CONFIGURAÇÃO ---
 SHEET_ID = "16YOR1odJ11iiUUI_y62FKb7GotQSRZeu64qP6RwZXrU"
+CALENDAR_ID = "dra.thaismilene@gmail.com" # E-mail oficial da agenda
 
-# Tabela de Preços
+# Tabela de Preços (Estimativa para Dashboard)
 PRECOS = {
     "Avaliação (1ª Vez)": 0,
     "Limpeza": 250,
@@ -38,60 +40,22 @@ def get_img_as_base64(path):
         return base64.b64encode(data).decode()
     except: return None
 
-# --- 3. ESTILO VISUAL (ROSE PREMIUM + CORREÇÃO DE LINKS) ---
+# --- 3. ESTILO VISUAL (ROSE PREMIUM) ---
 st.markdown("""
     <style>
-        /* Fundo Geral */
         .stApp { background-color: #F0E4E6; }
         
-        /* --- ESCONDER BARRA DO STREAMLIT --- */
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
-        header {visibility: hidden;}
-        div[data-testid="stToolbar"] {visibility: hidden; height: 0%; position: fixed;}
-        div[data-testid="stDecoration"] {visibility: hidden; height: 0%;}
-        div[data-testid="stStatusWidget"] {visibility: hidden;}
-        .block-container { padding-top: 2rem !important; }
-
-        /* --- BOTÕES --- */
+        /* Botões */
         .big-button { width: 100%; height: 120px; border-radius: 20px; color: white; font-size: 20px; font-weight: 600; cursor: pointer; margin-bottom: 15px; display: flex; align-items: center; justify-content: center; text-decoration: none; transition: transform 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
         .big-button:hover { transform: scale(1.02); }
         
         div[data-testid="stButton"] button[kind="primary"] { background-color: #D8A7B1 !important; color: white !important; border: none; border-radius: 12px; height: 60px; font-size: 18px; font-weight: 600; box-shadow: 0 4px 10px rgba(216, 167, 177, 0.3); width: 100%; }
         div[data-testid="stButton"] button[kind="secondary"] { background-color: #FFFFFF !important; color: #2F2F33 !important; border: 1px solid #E6E6E8; border-radius: 12px; height: 60px; font-size: 16px; font-weight: 500; width: 100%; }
         
-        /* Links Personalizados (FIX DO AZUL) */
-        a.custom-link-btn { 
-            display: flex !important; 
-            align-items: center !important; 
-            justify-content: center !important; 
-            width: 100% !important; 
-            height: 60px !important; 
-            background-color: #FFFFFF !important; 
-            color: #2F2F33 !important; /* Grafite - Tira o Azul */
-            border: 1px solid #E6E6E8 !important; 
-            border-radius: 12px !important; 
-            text-decoration: none !important; /* Tira o sublinhado */
-            font-size: 16px !important; 
-            font-weight: 500 !important; 
-            box-shadow: 0 2px 5px rgba(0,0,0,0.02) !important; 
-            transition: all 0.3s ease !important; 
-            margin-bottom: 15px !important; 
-        }
-        a.custom-link-btn:hover { 
-            transform: translateY(-2px); 
-            border-color: #D8A7B1 !important; 
-            color: #D8A7B1 !important; /* Rose no Hover */
-            box-shadow: 0 4px 12px rgba(216, 167, 177, 0.2) !important; 
-        }
-        /* Garante que o ícone mude de cor junto com o texto */
-        a.custom-link-btn svg {
-            fill: currentColor !important;
-            transition: fill 0.3s ease !important;
-        }
-        
-        /* Ícones dentro dos botões */
-        .btn-icon { width: 24px; height: 24px; margin-right: 12px; }
+        /* Links Personalizados */
+        .custom-link-btn { display: flex; align-items: center; justify-content: center; width: 100%; height: 60px; background-color: #FFFFFF; color: #2F2F33; border: 1px solid #E6E6E8; border-radius: 12px; text-decoration: none; font-size: 16px; font-weight: 500; box-shadow: 0 2px 5px rgba(0,0,0,0.02); transition: all 0.3s ease; margin-bottom: 15px; }
+        .custom-link-btn:hover { transform: translateY(-2px); border-color: #D8A7B1; color: #D8A7B1; box-shadow: 0 4px 12px rgba(216, 167, 177, 0.2); }
+        .btn-icon { width: 24px; height: 24px; margin-right: 12px; fill: currentColor; }
 
         /* Inputs */
         .stTextInput input, .stSelectbox div[data-baseweb="select"] div, .stDateInput input, .stTextArea textarea { background-color: #FFFFFF !important; border: 1px solid #E6E6E8 !important; border-radius: 10px !important; color: #2F2F33 !important; padding-left: 12px; }
@@ -108,83 +72,101 @@ st.markdown("""
         .login-box { background-color: #FFFFFF; padding: 20px; border-radius: 12px; border: 1px solid #E6E6E8; margin-bottom: 25px; box-shadow: 0 4px 12px rgba(0,0,0,0.02); }
         .ticket { background-color: white; border: 1px solid #C9B49A; padding: 30px; border-radius: 12px; margin-top: 20px; text-align: center; position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.03); }
         .ticket::before { content: "✦"; color: #C9B49A; font-size: 20px; position: absolute; top: 10px; left: 50%; transform: translateX(-50%); }
-        .social-footer { text-align: center; margin-top: 40px; }
-        .social-footer a { margin: 0 10px; text-decoration: none; font-size: 24px; color: #7A7A7C; transition: color 0.3s; }
-        .social-footer a:hover { color: #D8A7B1; }
         .header-container { display: flex; justify-content: center; align-items: center; gap: 20px; margin-bottom: 20px; margin-top: 10px; }
         .header-dra { width: 120px; height: 120px; border-radius: 50%; border: 3px solid #D8A7B1; object-fit: cover; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         .header-logo { width: 120px; height: auto; object-fit: contain; }
         a { text-decoration: none; }
         [data-testid="stImage"] { margin: 0 auto; }
-
-        /* --- RODAPÉ SOCIAL COM ÍCONES SVG --- */
-        .social-footer { 
-            display: flex; 
-            justify-content: center; 
-            gap: 25px; 
-            margin-top: 40px; 
-            margin-bottom: 20px;
-        }
-        .social-icon { 
-            width: 28px; 
-            height: 28px; 
-            fill: #7A7A7C; /* Cor Cinza Original */
-            transition: all 0.3s ease; 
-            cursor: pointer;
-        }
-        .social-icon:hover { 
-            fill: #D8A7B1; /* Cor Rose ao passar o mouse */
-            transform: scale(1.2); 
-        }
+        
+        /* Esconder Menus */
+        #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
+        div[data-testid="stToolbar"] {visibility: hidden; height: 0%; position: fixed;}
+        div[data-testid="stDecoration"] {visibility: hidden; height: 0%;}
+        div[data-testid="stStatusWidget"] {visibility: hidden;}
+        .block-container { padding-top: 2rem !important; }
+        .social-footer { text-align: center; margin-top: 40px; }
+        .social-footer a { margin: 0 10px; text-decoration: none; font-size: 24px; color: #7A7A7C; transition: color 0.3s; }
+        .social-footer a:hover { color: #D8A7B1; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 4. FUNÇÕES DE EMAIL ---
-def enviar_email_confirmacao(nome_paciente, email_paciente, data, hora, servico):
+# --- 4. CREDENCIAIS UNIFICADAS (SHEETS + CALENDAR) ---
+@st.cache_resource
+def get_credentials():
+    try:
+        scope = [
+            "https://spreadsheets.google.com/feeds", 
+            "https://www.googleapis.com/auth/drive",
+            "https://www.googleapis.com/auth/calendar"
+        ]
+        if "gcp_service_account" not in st.secrets:
+            st.error("⚠️ Segredos não encontrados."); return None
+        return ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
+    except: return None
+
+# --- 5. FUNÇÕES DE INTEGRAÇÃO ---
+
+def conectar_google_sheets():
+    creds = get_credentials()
+    if not creds: return None
+    try:
+        client = gspread.authorize(creds)
+        return client.open_by_key(SHEET_ID).sheet1
+    except: return None
+
+def adicionar_ao_calendar(nome, tel, data_obj, hora_str, servico):
+    """Cria evento no Google Calendar da Dra"""
+    creds = get_credentials()
+    if not creds: return False
+    
+    try:
+        service = build('calendar', 'v3', credentials=creds)
+        
+        start_time = f"{data_obj.strftime('%Y-%m-%d')}T{hora_str}:00"
+        end_time_obj = datetime.strptime(start_time, "%Y-%m-%dT%H:%M:%S") + timedelta(hours=1)
+        end_time = end_time_obj.strftime("%Y-%m-%dT%H:%M:%S")
+        
+        evento = {
+            'summary': f"🦷 {nome} - {servico}",
+            'location': 'Consultório Dra Thais',
+            'description': f"Paciente: {nome}\nTel: {tel}\nServiço: {servico}\nAgendado pelo Site.",
+            'start': {'dateTime': start_time, 'timeZone': 'America/Sao_Paulo'},
+            'end': {'dateTime': end_time, 'timeZone': 'America/Sao_Paulo'},
+            'colorId': '11', # Vermelho/Rosa no Calendar
+        }
+        
+        service.events().insert(calendarId=CALENDAR_ID, body=evento).execute()
+        return True
+    except Exception as e:
+        print(f"Erro Calendar: {e}")
+        return False
+
+def enviar_email(nome, email, data, hora, serv):
     if "email" not in st.secrets: return
     try:
         remetente = st.secrets["email"]["usuario"]
-        senha = st.secrets["email"]["senha"]
         msg = MIMEMultipart()
         msg['From'] = remetente
-        msg['To'] = email_paciente
-        msg['Subject'] = f"Confirmação: {servico} com Dra. Thais"
-        corpo = f"Olá {nome_paciente},\n\nSeu agendamento está confirmado.\n\n📅 Data: {data}\n⏰ Horário: {hora}\n🦷 Procedimento: {servico}\n📍 Local: Taubaté/SP\n\nAtenciosamente,\nEquipe Dra. Thais Milene"
+        msg['To'] = email
+        msg['Subject'] = f"Confirmação: {serv} com Dra. Thais"
+        corpo = f"Olá {nome},\n\nSeu agendamento está confirmado.\n\n📅 Data: {data}\n⏰ Horário: {hora}\n🦷 Procedimento: {serv}\n\nAtenciosamente,\nEquipe Dra. Thais Milene"
         msg.attach(MIMEText(corpo, 'plain'))
         
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
-        server.login(remetente, senha)
+        server.login(remetente, st.secrets["email"]["senha"])
         server.send_message(msg)
         
-        # Copia para Dra
         msg_dra = MIMEMultipart()
         msg_dra['From'] = remetente
-        msg_dra['To'] = remetente
-        msg_dra['Subject'] = f"🔔 Novo Agendamento: {nome_paciente}"
-        msg_dra.attach(MIMEText(f"Novo agendamento:\n{nome_paciente}\n{email_paciente}\n{data} - {hora}\n{serv}", 'plain'))
+        msg_dra['To'] = CALENDAR_ID
+        msg_dra['Subject'] = f"🔔 Novo Paciente: {nome}"
+        msg_dra.attach(MIMEText(f"Novo agendamento:\n{nome}\n{email}\n{data} - {hora}\n{serv}", 'plain'))
         server.send_message(msg_dra)
         server.quit()
-        return True
-    except: return False
+    except: pass
 
-# --- 5. CONEXÃO GOOGLE SHEETS ---
-@st.cache_resource
-def get_gspread_client():
-    try:
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        if "gcp_service_account" not in st.secrets:
-            st.error("⚠️ Segredo 'gcp_service_account' não encontrado."); return None
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
-        return gspread.authorize(creds)
-    except Exception as e: st.error(f"❌ Erro Técnico: {e}"); return None
-
-def conectar_google_sheets():
-    client = get_gspread_client()
-    if client is None: return None
-    try: return client.open_by_key(SHEET_ID).sheet1
-    except Exception as e: st.sidebar.error(f"❌ Erro Planilha: {e}"); return None
-
+# --- 6. OPERAÇÕES ---
 def carregar_dados_gs():
     sheet = conectar_google_sheets()
     if sheet is None: return pd.DataFrame()
@@ -203,7 +185,11 @@ def salvar_agendamento(nome, tel, email, data, hora, serv, anam):
         data_br = data.strftime("%d/%m/%Y")
         agora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         sheet.append_row([str(nome), str(tel), str(email), str(data_br), str(hora), str(serv), str(anam), str(agora)])
-        if email and "@" in email: enviar_email_confirmacao(nome, email, data_br, hora, serv)
+        
+        # Tenta integrações (não bloqueia se falhar)
+        if email and "@" in email: enviar_email(nome, email, data_br, hora, serv)
+        adicionar_ao_calendar(nome, tel, data, hora, serv)
+            
         return "OK"
     except Exception as e: return f"Erro: {e}"
 
@@ -220,10 +206,9 @@ def get_horarios_ocupados(data_desejada):
 def buscar_paciente_login(dado_busca):
     df = carregar_dados_gs()
     if df.empty: return None
-    dado_limpo = re.sub(r'\D', '', dado_busca)
+    limpo = re.sub(r'\D', '', dado_busca)
     if 'Telefone' in df.columns:
-        df['tel_temp'] = df['Telefone'].astype(str).apply(lambda x: re.sub(r'\D', '', x))
-        res = df[df['tel_temp'] == dado_limpo]
+        res = df[df['Telefone'].astype(str).apply(lambda x: re.sub(r'\D', '', x)) == limpo]
         if not res.empty: return res.iloc[-1]
     if 'Email' in df.columns:
         res = df[df['Email'].astype(str).str.lower() == dado_busca.lower()]
@@ -241,7 +226,7 @@ def format_tel(t):
     n = re.sub(r'\D', '', t)
     return f"({n[:2]}) {n[2:7]}-{n[7:]}" if len(n) == 11 else t
 
-# --- 6. LÓGICA DO SITE ---
+# --- 7. NAVEGAÇÃO ---
 if 'pagina' not in st.session_state: st.session_state.pagina = 'home'
 def ir_para(p): st.session_state.pagina = p
 
@@ -249,20 +234,21 @@ if 'pre_nome' not in st.session_state: st.session_state.pre_nome = ""
 if 'pre_tel' not in st.session_state: st.session_state.pre_tel = ""
 if 'pre_email' not in st.session_state: st.session_state.pre_email = ""
 
-# SIDEBAR
+# --- ÁREA ADMIN PROTEGIDA ---
 with st.sidebar:
-    st.header("🔧 Admin")
-    if st.button("Testar Conexão"):
-        client = get_gspread_client()
-        if client:
-            try:
-                sheet = client.open_by_key(SHEET_ID).sheet1
-                st.success(f"✅ Conectado: {sheet.title}")
-            except Exception as e: st.error(f"❌ Erro: {e}")
-        else: st.error("Erro Secrets")
-    st.write("---")
-    if st.text_input("Senha", type="password") == "admin123":
-        if st.button("Painel"): ir_para('admin_panel')
+    with st.expander("🔐 Acesso Restrito"):
+        senha_admin = st.text_input("Senha", type="password", key="admin_pass")
+        if senha_admin == "admin123":
+            st.success("🔓 Acesso Liberado")
+            st.markdown("---")
+            if st.button("📊 Painel Financeiro"): ir_para('admin_panel')
+            if st.button("🔌 Testar Conexões"):
+                c = conectar_google_sheets()
+                if c: st.success(f"Planilha OK")
+                else: st.error("Erro Planilha")
+                if adicionar_ao_calendar("Teste", "00", datetime.now(), "08:00", "Teste"):
+                    st.success("Agenda Google OK")
+                else: st.warning("Agenda Google Falhou (Verifique permissão)")
 
 # --- TELA 1: HOME ---
 if st.session_state.pagina == 'home':
@@ -282,18 +268,12 @@ if st.session_state.pagina == 'home':
     st.markdown("<h2 style='text-align:center; color:#2F2F33; margin-top:-10px; margin-bottom:5px'>Dra. Thais Milene</h2>", unsafe_allow_html=True)
     st.markdown("<h5 style='text-align:center; color:#7A7A7C; font-weight:normal; margin-bottom: 30px;'>Harmonização Orofacial & Odontologia</h5>", unsafe_allow_html=True)
     
-    # BOTÕES PRINCIPAIS
-    if st.button("✨ Agende sua Consulta", type="primary", use_container_width=True): 
-        ir_para('agendar')
-    
+    if st.button("✨ Agende sua Consulta", type="primary", use_container_width=True): ir_para('agendar')
     st.write("") 
-    
-    if st.button("📂 Minhas Reservas", type="secondary", use_container_width=True): 
-        ir_para('reservas')
-        
+    if st.button("📂 Minhas Reservas", type="secondary", use_container_width=True): ir_para('reservas')
     st.write("") 
 
-    # BOTÕES DE LINK COM ÍCONES (COR DO SITE)
+    # Links com Ícones SVG
     st.markdown("""
     <a href="https://wa.me/5512997997515" class="custom-link-btn" target="_blank">
         <svg class="btn-icon" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
@@ -404,15 +384,32 @@ elif st.session_state.pagina == 'agendar':
 elif st.session_state.pagina == 'reservas':
     if st.button("⬅ Voltar"): ir_para('home'); st.rerun()
     st.markdown("<h3 style='color:#2F2F33'>Minhas Reservas</h3>", unsafe_allow_html=True)
-    t = st.text_input("Seu WhatsApp")
+    t_busca = st.text_input("Seu WhatsApp")
     if st.button("🔎 Buscar"):
-        df = buscar_agendamentos_cliente(t)
+        df = buscar_agendamentos_cliente(t_busca)
         if not df.empty: st.dataframe(df, hide_index=True, use_container_width=True)
         else: st.warning("Nada encontrado.")
 
 # TELA 4: ADMIN
 elif st.session_state.pagina == 'admin_panel':
     if st.button("⬅ Sair"): ir_para('home'); st.rerun()
+    st.title("📊 Painel da Dra. Thais")
     df = carregar_dados_gs()
-    if not df.empty: st.dataframe(df, use_container_width=True)
-    else: st.info("Vazio.")
+    if not df.empty:
+        df['Faturamento'] = df['Servico'].map(PRECOS).fillna(0)
+        mes = datetime.now().strftime("%m/%Y")
+        try:
+            df['DataObj'] = pd.to_datetime(df['Data'], format="%d/%m/%Y", errors='coerce')
+            df_mes = df[df['DataObj'].dt.strftime("%m/%Y") == mes]
+            fat = df_mes['Faturamento'].sum(); qtd = len(df_mes)
+        except: fat=0; qtd=0
+        
+        m1,m2,m3 = st.columns(3)
+        with m1: st.markdown(f"<div class='metric-card'><div class='metric-label'>Total</div><div class='metric-value'>{len(df)}</div></div>", unsafe_allow_html=True)
+        with m2: st.markdown(f"<div class='metric-card'><div class='metric-label'>Faturamento ({mes})</div><div class='metric-value'>R$ {fat:,.2f}</div></div>", unsafe_allow_html=True)
+        with m3: st.markdown(f"<div class='metric-card'><div class='metric-label'>Pacientes Mês</div><div class='metric-value'>{qtd}</div></div>", unsafe_allow_html=True)
+        
+        st.write(""); st.subheader("📈 Procedimentos")
+        st.bar_chart(df['Servico'].value_counts(), color="#D8A7B1")
+        with st.expander("📋 Ver Tabela"): st.dataframe(df[['Data','Horario','Nome','Servico']], use_container_width=True)
+    else: st.info("Sem dados.")
