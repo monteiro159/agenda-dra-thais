@@ -6,7 +6,7 @@ import re
 import os
 import base64
 import gspread
-from google.oauth2 import service_account # NOVA BIBLIOTECA DE AUTENTICAÇÃO
+from google.oauth2 import service_account
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -212,7 +212,7 @@ def get_horarios_ocupados(data_desejada):
         return df[df['Data'].isin([data_desejada.strftime("%d/%m/%Y"), str(data_desejada)])]['Horario'].tolist()
     except: return []
 
-# --- BUSCA INTELIGENTE (NOME, TEL OU EMAIL) ---
+# --- BUSCA INTELIGENTE (CORREÇÃO DE ERRO VALUE ERROR) ---
 def buscar_paciente_login(dado_busca):
     df = carregar_dados_gs()
     if df.empty: return None
@@ -323,6 +323,7 @@ elif st.session_state.pagina == 'agendar':
     if st.button("⬅ Voltar"): ir_para('home'); st.rerun()
     st.markdown("<h2 style='color:#2F2F33;'>Ficha do Paciente</h2>", unsafe_allow_html=True)
     
+    # LOGIN (CORREÇÃO DE ERRO VALUE ERROR)
     with st.expander("👋 Já possui cadastro? Clique aqui!"):
         st.markdown("<div class='login-box'>", unsafe_allow_html=True)
         c1, c2 = st.columns([3, 1])
@@ -331,7 +332,7 @@ elif st.session_state.pagina == 'agendar':
             st.write(""); st.write("")
             if st.button("🔍 Buscar"):
                 p = buscar_paciente_login(busca)
-                if p:
+                if p is not None:
                     st.session_state.pre_nome = p['Nome']; st.session_state.pre_tel = p['Telefone']
                     st.session_state.pre_email = p.get('Email', '')
                     st.success(f"Olá, {p['Nome']}!"); time.sleep(1); st.rerun()
