@@ -6,12 +6,13 @@ import re
 import os
 import base64
 import gspread
-from google.oauth2 import service_account # Autenticação Moderna
+from google.oauth2 import service_account
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-# --- TENTATIVA DE IMPORTAR CALENDAR ---
+# --- TENTATIVA DE IMPORTAR CALENDAR DE FORMA SEGURA ---
+# Se falhar, o site continua funcionando sem agenda
 try:
     from googleapiclient.discovery import build
     CALENDAR_AVAILABLE = True
@@ -21,9 +22,9 @@ except ImportError:
 # --- 1. CONFIGURAÇÃO INICIAL ---
 st.set_page_config(page_title="Dra. Thais Milene", page_icon="🦷", layout="centered", initial_sidebar_state="collapsed")
 
-# AVISO DE DEBUG (Só aparece se a biblioteca faltar)
+# AVISO DE DEBUG (SÓ APARECE SE DER ERRO TÉCNICO)
 if not CALENDAR_AVAILABLE:
-    st.warning("⚠️ Biblioteca Calendar ausente. Reinicie o App no painel do Streamlit.")
+    print("⚠️ Biblioteca Calendar não carregada. O site funcionará sem agenda Google.")
 
 # --- 2. CONFIGURAÇÃO ---
 SHEET_ID = "16YOR1odJ11iiUUI_y62FKb7GotQSRZeu64qP6RwZXrU"
@@ -97,7 +98,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 4. CREDENCIAIS MODERNAS (GOOGLE AUTH) ---
+# --- 4. CREDENCIAIS ---
 @st.cache_resource
 def get_credentials():
     try:
@@ -108,10 +109,7 @@ def get_credentials():
         ]
         if "gcp_service_account" not in st.secrets:
             return None
-        
-        # Converte secrets para dicionário normal
         creds_dict = dict(st.secrets["gcp_service_account"])
-        
         creds = service_account.Credentials.from_service_account_info(
             creds_dict, scopes=scope
         )
@@ -129,13 +127,16 @@ def conectar_google_sheets():
 
 def adicionar_ao_calendar(nome, tel, data_obj, hora_str, servico):
     if not CALENDAR_AVAILABLE:
-        return "Erro: Biblioteca Calendar ausente."
+        # Retorna erro silencioso se a biblioteca não estiver instalada
+        print("Biblioteca Google Calendar não instalada.")
+        return "Erro: Lib Calendar Ausente"
         
     creds = get_credentials()
     if not creds: return "Erro Credenciais"
     
     try:
         service = build('calendar', 'v3', credentials=creds)
+        
         start_time = f"{data_obj.strftime('%Y-%m-%d')}T{hora_str}:00"
         end_time_obj = datetime.strptime(start_time, "%Y-%m-%dT%H:%M:%S") + timedelta(hours=1)
         end_time = end_time_obj.strftime("%Y-%m-%dT%H:%M:%S")
@@ -221,21 +222,18 @@ def buscar_paciente_login(dado_busca):
     if df.empty: return None
     
     dado_str = str(dado_busca).strip()
-    
-    # 1. Busca por Telefone (se for só numeros)
     dado_limpo_tel = re.sub(r'\D', '', dado_str)
+    
     if dado_limpo_tel and len(dado_limpo_tel) >= 8 and 'Telefone' in df.columns:
          df['tel_temp'] = df['Telefone'].astype(str).apply(lambda x: re.sub(r'\D', '', x))
          res = df[df['tel_temp'] == dado_limpo_tel]
          if not res.empty: return res.iloc[-1]
 
-    # 2. Busca por Email
     if '@' in dado_str and 'Email' in df.columns:
         res = df[df['Email'].astype(str).str.lower() == dado_str.lower()]
         if not res.empty: return res.iloc[-1]
 
-    # 3. Busca por Nome (Contém)
-    if 'Nome' in df.columns and len(dado_str) > 2:
+    if 'Nome' in df.columns and len(dado_str) > 2 and not dado_limpo_tel:
         res = df[df['Nome'].astype(str).str.lower().str.contains(dado_str.lower(), na=False)]
         if not res.empty: return res.iloc[-1]
 
@@ -275,12 +273,11 @@ with st.sidebar:
                 if c: st.success("✅ Planilha OK")
                 else: st.error("❌ Erro Planilha")
                 
-                # Teste de Agenda
                 res = adicionar_ao_calendar("Teste", "00", datetime.now(), "08:00", "Teste Site")
                 if res == "OK": st.success("✅ Agenda Google OK")
                 else: 
-                    st.error(f"❌ Falha Agenda: {res}")
-                    if "403" in str(res): st.info("Dica: Verifique permissão de 'Alterar Eventos' no Google Calendar.")
+                    st.error(f"❌ Falha Agenda")
+                    st.code(res)
 
 # --- TELA 1: HOME ---
 if st.session_state.pagina == 'home':
@@ -394,9 +391,12 @@ elif st.session_state.pagina == 'agendar':
                     st.session_state.pre_nome="";st.session_state.pre_tel="";st.session_state.pre_email=""
                     time.sleep(10); ir_para('home'); st.rerun()
                 elif "OK_PLANILHA_ERRO_AGENDA" in res:
-                    st.warning("⚠️ Agendado na Planilha, mas falha na Agenda Google.")
+                    erro_real = res.split(":", 1)[1]
+                    st.warning(f"⚠️ Agendado na Planilha, mas falha na Agenda Google.")
+                    with st.expander("Ver erro técnico (Para Suporte)"):
+                        st.code(erro_real)
                     st.balloons()
-                    time.sleep(5); ir_para('home'); st.rerun()
+                    time.sleep(10); ir_para('home'); st.rerun()
                 else:
                     msg.error(res)
 
