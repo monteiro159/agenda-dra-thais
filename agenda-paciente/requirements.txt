@@ -1,5 +1,5 @@
 streamlit
 pandas
 gspread
-oauth2client
+google-auth
 google-api-python-client
