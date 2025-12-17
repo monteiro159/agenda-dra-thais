@@ -6,8 +6,7 @@ import re
 import os
 import base64
 import gspread
-# MUDANÇA: Usando a biblioteca moderna de autenticação do Google
-from google.oauth2 import service_account
+from google.oauth2 import service_account # Autenticação Moderna
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -22,13 +21,13 @@ except ImportError:
 # --- 1. CONFIGURAÇÃO INICIAL ---
 st.set_page_config(page_title="Dra. Thais Milene", page_icon="🦷", layout="centered", initial_sidebar_state="collapsed")
 
-# AVISO DE DEBUG
+# AVISO DE DEBUG (Só aparece se a biblioteca faltar)
 if not CALENDAR_AVAILABLE:
-    st.warning("⚠️ Biblioteca do Google Calendar ausente. O site funcionará, mas sem agenda.")
+    st.warning("⚠️ Biblioteca Calendar ausente. Reinicie o App no painel do Streamlit.")
 
 # --- 2. CONFIGURAÇÃO ---
 SHEET_ID = "16YOR1odJ11iiUUI_y62FKb7GotQSRZeu64qP6RwZXrU"
-CALENDAR_ID = "dra.thaismilene@gmail.com" # Certifique-se que este email é exato
+CALENDAR_ID = "dra.thaismilene@gmail.com"
 
 # Tabela de Preços
 PRECOS = {
@@ -98,7 +97,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 4. CREDENCIAIS MODERNAS (GOOGLE AUTH - CORREÇÃO DE CONFLITO) ---
+# --- 4. CREDENCIAIS MODERNAS (GOOGLE AUTH) ---
 @st.cache_resource
 def get_credentials():
     try:
@@ -107,25 +106,23 @@ def get_credentials():
             "https://www.googleapis.com/auth/drive",
             "https://www.googleapis.com/auth/calendar"
         ]
+        if "gcp_service_account" not in st.secrets:
+            return None
         
-        # Converte o objeto de secrets (AtribDict) para dicionário normal do Python
-        # Isso evita erros de tipo em algumas versões da biblioteca
-        service_account_info = dict(st.secrets["gcp_service_account"])
-
+        # Converte secrets para dicionário normal
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        
         creds = service_account.Credentials.from_service_account_info(
-            service_account_info, scopes=scope
+            creds_dict, scopes=scope
         )
         return creds
-    except Exception as e:
-        # st.error(f"Erro Auth: {e}") # Descomente para debug pesado
-        return None
+    except: return None
 
 # --- 5. INTEGRAÇÕES ---
 def conectar_google_sheets():
     creds = get_credentials()
     if not creds: return None
     try:
-        # gspread aceita credenciais modernas do google.auth
         client = gspread.authorize(creds)
         return client.open_by_key(SHEET_ID).sheet1
     except: return None
@@ -135,11 +132,10 @@ def adicionar_ao_calendar(nome, tel, data_obj, hora_str, servico):
         return "Erro: Biblioteca Calendar ausente."
         
     creds = get_credentials()
-    if not creds: return "Erro Credenciais (Auth)"
+    if not creds: return "Erro Credenciais"
     
     try:
         service = build('calendar', 'v3', credentials=creds)
-        
         start_time = f"{data_obj.strftime('%Y-%m-%d')}T{hora_str}:00"
         end_time_obj = datetime.strptime(start_time, "%Y-%m-%dT%H:%M:%S") + timedelta(hours=1)
         end_time = end_time_obj.strftime("%Y-%m-%dT%H:%M:%S")
@@ -153,11 +149,9 @@ def adicionar_ao_calendar(nome, tel, data_obj, hora_str, servico):
             'colorId': '11', # Vermelho/Rosa
         }
         
-        # Tenta inserir
         service.events().insert(calendarId=CALENDAR_ID, body=evento).execute()
         return "OK"
     except Exception as e:
-        # Retorna o erro exato para mostrar na tela se falhar
         return f"Erro Google: {e}"
 
 def enviar_email(nome, email, data, hora, serv):
@@ -207,14 +201,9 @@ def salvar_agendamento(nome, tel, email, data, hora, serv, anam):
         
         if email and "@" in email: enviar_email(nome, email, data_br, hora, serv)
         
-        # Tenta salvar no Calendar e pega o resultado
         res_cal = adicionar_ao_calendar(nome, tel, data, hora, serv)
-        
-        # Retorna OK se a planilha salvou, mas retorna o erro da agenda junto se falhar
-        if res_cal == "OK":
-            return "OK"
-        else:
-            return f"OK_PLANILHA_ERRO_AGENDA:{res_cal}"
+        if res_cal == "OK": return "OK"
+        else: return f"OK_PLANILHA_ERRO_AGENDA:{res_cal}"
             
     except Exception as e: return f"Erro Geral: {e}"
 
@@ -226,23 +215,26 @@ def get_horarios_ocupados(data_desejada):
         return df[df['Data'].isin([data_desejada.strftime("%d/%m/%Y"), str(data_desejada)])]['Horario'].tolist()
     except: return []
 
-# --- BUSCA INTELIGENTE ---
+# --- BUSCA INTELIGENTE (CORRIGIDA) ---
 def buscar_paciente_login(dado_busca):
     df = carregar_dados_gs()
     if df.empty: return None
     
     dado_str = str(dado_busca).strip()
-    dado_limpo_tel = re.sub(r'\D', '', dado_str)
     
+    # 1. Busca por Telefone (se for só numeros)
+    dado_limpo_tel = re.sub(r'\D', '', dado_str)
     if dado_limpo_tel and len(dado_limpo_tel) >= 8 and 'Telefone' in df.columns:
          df['tel_temp'] = df['Telefone'].astype(str).apply(lambda x: re.sub(r'\D', '', x))
          res = df[df['tel_temp'] == dado_limpo_tel]
          if not res.empty: return res.iloc[-1]
 
+    # 2. Busca por Email
     if '@' in dado_str and 'Email' in df.columns:
         res = df[df['Email'].astype(str).str.lower() == dado_str.lower()]
         if not res.empty: return res.iloc[-1]
 
+    # 3. Busca por Nome (Contém)
     if 'Nome' in df.columns and len(dado_str) > 2:
         res = df[df['Nome'].astype(str).str.lower().str.contains(dado_str.lower(), na=False)]
         if not res.empty: return res.iloc[-1]
@@ -283,12 +275,12 @@ with st.sidebar:
                 if c: st.success("✅ Planilha OK")
                 else: st.error("❌ Erro Planilha")
                 
-                # Teste de Agenda com retorno visual do erro
+                # Teste de Agenda
                 res = adicionar_ao_calendar("Teste", "00", datetime.now(), "08:00", "Teste Site")
                 if res == "OK": st.success("✅ Agenda Google OK")
                 else: 
                     st.error(f"❌ Falha Agenda: {res}")
-                    if "403" in str(res): st.info("Dica: Verifique permissão de 'Alterar Eventos' no Google Calendar para o email do robô.")
+                    if "403" in str(res): st.info("Dica: Verifique permissão de 'Alterar Eventos' no Google Calendar.")
 
 # --- TELA 1: HOME ---
 if st.session_state.pagina == 'home':
