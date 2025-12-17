@@ -6,12 +6,13 @@ import re
 import os
 import base64
 import gspread
+# MUDANÇA: Usando a biblioteca moderna de autenticação do Google
 from google.oauth2 import service_account
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-# --- TENTATIVA DE IMPORTAR CALENDAR (COM AVISO VISUAL) ---
+# --- TENTATIVA DE IMPORTAR CALENDAR ---
 try:
     from googleapiclient.discovery import build
     CALENDAR_AVAILABLE = True
@@ -21,13 +22,13 @@ except ImportError:
 # --- 1. CONFIGURAÇÃO INICIAL ---
 st.set_page_config(page_title="Dra. Thais Milene", page_icon="🦷", layout="centered", initial_sidebar_state="collapsed")
 
-# AVISO DE DEBUG SE FALTAR BIBLIOTECA (SÓ APARECE SE DER ERRO)
+# AVISO DE DEBUG
 if not CALENDAR_AVAILABLE:
-    st.warning("⚠️ Atenção: A biblioteca do Google Calendar não foi carregada. Verifique se 'google-api-python-client' está no requirements.txt e reinicie o app.")
+    st.warning("⚠️ Biblioteca do Google Calendar ausente. O site funcionará, mas sem agenda.")
 
 # --- 2. CONFIGURAÇÃO ---
 SHEET_ID = "16YOR1odJ11iiUUI_y62FKb7GotQSRZeu64qP6RwZXrU"
-CALENDAR_ID = "dra.thaismilene@gmail.com" # E-mail da agenda
+CALENDAR_ID = "dra.thaismilene@gmail.com" # Certifique-se que este email é exato
 
 # Tabela de Preços
 PRECOS = {
@@ -97,7 +98,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 4. CREDENCIAIS MODERNAS (GOOGLE AUTH) ---
+# --- 4. CREDENCIAIS MODERNAS (GOOGLE AUTH - CORREÇÃO DE CONFLITO) ---
 @st.cache_resource
 def get_credentials():
     try:
@@ -106,20 +107,25 @@ def get_credentials():
             "https://www.googleapis.com/auth/drive",
             "https://www.googleapis.com/auth/calendar"
         ]
-        if "gcp_service_account" not in st.secrets:
-            return None
         
+        # Converte o objeto de secrets (AtribDict) para dicionário normal do Python
+        # Isso evita erros de tipo em algumas versões da biblioteca
+        service_account_info = dict(st.secrets["gcp_service_account"])
+
         creds = service_account.Credentials.from_service_account_info(
-            st.secrets["gcp_service_account"], scopes=scope
+            service_account_info, scopes=scope
         )
         return creds
-    except: return None
+    except Exception as e:
+        # st.error(f"Erro Auth: {e}") # Descomente para debug pesado
+        return None
 
 # --- 5. INTEGRAÇÕES ---
 def conectar_google_sheets():
     creds = get_credentials()
     if not creds: return None
     try:
+        # gspread aceita credenciais modernas do google.auth
         client = gspread.authorize(creds)
         return client.open_by_key(SHEET_ID).sheet1
     except: return None
@@ -129,10 +135,11 @@ def adicionar_ao_calendar(nome, tel, data_obj, hora_str, servico):
         return "Erro: Biblioteca Calendar ausente."
         
     creds = get_credentials()
-    if not creds: return "Erro Credenciais"
+    if not creds: return "Erro Credenciais (Auth)"
     
     try:
         service = build('calendar', 'v3', credentials=creds)
+        
         start_time = f"{data_obj.strftime('%Y-%m-%d')}T{hora_str}:00"
         end_time_obj = datetime.strptime(start_time, "%Y-%m-%dT%H:%M:%S") + timedelta(hours=1)
         end_time = end_time_obj.strftime("%Y-%m-%dT%H:%M:%S")
@@ -146,9 +153,11 @@ def adicionar_ao_calendar(nome, tel, data_obj, hora_str, servico):
             'colorId': '11', # Vermelho/Rosa
         }
         
+        # Tenta inserir
         service.events().insert(calendarId=CALENDAR_ID, body=evento).execute()
         return "OK"
     except Exception as e:
+        # Retorna o erro exato para mostrar na tela se falhar
         return f"Erro Google: {e}"
 
 def enviar_email(nome, email, data, hora, serv):
@@ -198,10 +207,15 @@ def salvar_agendamento(nome, tel, email, data, hora, serv, anam):
         
         if email and "@" in email: enviar_email(nome, email, data_br, hora, serv)
         
+        # Tenta salvar no Calendar e pega o resultado
         res_cal = adicionar_ao_calendar(nome, tel, data, hora, serv)
-        if res_cal != "OK": print(f"Aviso Calendar: {res_cal}")
+        
+        # Retorna OK se a planilha salvou, mas retorna o erro da agenda junto se falhar
+        if res_cal == "OK":
+            return "OK"
+        else:
+            return f"OK_PLANILHA_ERRO_AGENDA:{res_cal}"
             
-        return "OK"
     except Exception as e: return f"Erro Geral: {e}"
 
 def get_horarios_ocupados(data_desejada):
@@ -212,27 +226,24 @@ def get_horarios_ocupados(data_desejada):
         return df[df['Data'].isin([data_desejada.strftime("%d/%m/%Y"), str(data_desejada)])]['Horario'].tolist()
     except: return []
 
-# --- BUSCA INTELIGENTE (CORREÇÃO DE ERRO VALUE ERROR) ---
+# --- BUSCA INTELIGENTE ---
 def buscar_paciente_login(dado_busca):
     df = carregar_dados_gs()
     if df.empty: return None
     
     dado_str = str(dado_busca).strip()
-    
-    # 1. Busca por Telefone (se for só numeros)
     dado_limpo_tel = re.sub(r'\D', '', dado_str)
+    
     if dado_limpo_tel and len(dado_limpo_tel) >= 8 and 'Telefone' in df.columns:
          df['tel_temp'] = df['Telefone'].astype(str).apply(lambda x: re.sub(r'\D', '', x))
          res = df[df['tel_temp'] == dado_limpo_tel]
          if not res.empty: return res.iloc[-1]
 
-    # 2. Busca por Email
     if '@' in dado_str and 'Email' in df.columns:
         res = df[df['Email'].astype(str).str.lower() == dado_str.lower()]
         if not res.empty: return res.iloc[-1]
 
-    # 3. Busca por Nome (Contém)
-    if 'Nome' in df.columns:
+    if 'Nome' in df.columns and len(dado_str) > 2:
         res = df[df['Nome'].astype(str).str.lower().str.contains(dado_str.lower(), na=False)]
         if not res.empty: return res.iloc[-1]
 
@@ -272,12 +283,12 @@ with st.sidebar:
                 if c: st.success("✅ Planilha OK")
                 else: st.error("❌ Erro Planilha")
                 
-                # Teste de Agenda
+                # Teste de Agenda com retorno visual do erro
                 res = adicionar_ao_calendar("Teste", "00", datetime.now(), "08:00", "Teste Site")
                 if res == "OK": st.success("✅ Agenda Google OK")
                 else: 
                     st.error(f"❌ Falha Agenda: {res}")
-                    if "403" in str(res): st.info("Dica: Permissão de 'Alterar Eventos' no Calendar.")
+                    if "403" in str(res): st.info("Dica: Verifique permissão de 'Alterar Eventos' no Google Calendar para o email do robô.")
 
 # --- TELA 1: HOME ---
 if st.session_state.pagina == 'home':
@@ -323,7 +334,6 @@ elif st.session_state.pagina == 'agendar':
     if st.button("⬅ Voltar"): ir_para('home'); st.rerun()
     st.markdown("<h2 style='color:#2F2F33;'>Ficha do Paciente</h2>", unsafe_allow_html=True)
     
-    # LOGIN (CORREÇÃO DE ERRO VALUE ERROR)
     with st.expander("👋 Já possui cadastro? Clique aqui!"):
         st.markdown("<div class='login-box'>", unsafe_allow_html=True)
         c1, c2 = st.columns([3, 1])
@@ -379,15 +389,24 @@ elif st.session_state.pagina == 'agendar':
             elif hr=="Indisponível": msg.error("Horário inválido")
             else:
                 ficha = f"[PERFIL] {datetime.now().year-ano}a|{gen}\n[QUEIXA] {queixa}\n[OBS] {infos}"
+                
+                # Salvando (Recebe OK ou ERRO)
                 res = salvar_agendamento(nome, format_tel(tc), email, dt, hr, serv, ficha)
-                if res=="OK":
+                
+                # Tratamento de Retorno
+                if res == "OK":
                     st.balloons()
                     msg_zap = f"Olá! Agendei {serv} dia {dt.strftime('%d/%m')} às {hr}."
                     st.markdown(f'<div class="ticket">✅ Confirmado!<br><b>{nome}</b><br>{dt.strftime("%d/%m")} - {hr}<br><small>Verifique seu e-mail!</small></div>', unsafe_allow_html=True)
                     st.markdown(f'<a href="https://wa.me/5512997997515?text={msg_zap}" target="_blank" class="big-button" style="background:#25D366;height:60px;font-size:16px;margin-top:10px;">📲 ENVIAR WHATSAPP</a>', unsafe_allow_html=True)
                     st.session_state.pre_nome="";st.session_state.pre_tel="";st.session_state.pre_email=""
                     time.sleep(10); ir_para('home'); st.rerun()
-                else: msg.error(res)
+                elif "OK_PLANILHA_ERRO_AGENDA" in res:
+                    st.warning("⚠️ Agendado na Planilha, mas falha na Agenda Google.")
+                    st.balloons()
+                    time.sleep(5); ir_para('home'); st.rerun()
+                else:
+                    msg.error(res)
 
 # TELA 3: RESERVAS
 elif st.session_state.pagina == 'reservas':
@@ -422,3 +441,11 @@ elif st.session_state.pagina == 'admin_panel':
         st.bar_chart(df['Servico'].value_counts(), color="#D8A7B1")
         with st.expander("📋 Ver Tabela"): st.dataframe(df[['Data','Horario','Nome','Servico']], use_container_width=True)
     else: st.info("Sem dados.")
+```
+
+**⚠️ Resumo do que fazer agora:**
+1.  Atualize o `agendamento.py`.
+2.  Faça o upload (`git push`).
+3.  Vá no Streamlit e clique em **Reboot App**.
+
+Isso deve resolver tanto o erro de busca de paciente quanto a instabilidade da biblioteca do calendário. Se a biblioteca ainda não estiver lá, ele vai avisar com uma tarja amarela, mas não vai travar o site! 🚀
