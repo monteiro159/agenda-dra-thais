@@ -441,11 +441,3 @@ elif st.session_state.pagina == 'admin_panel':
         st.bar_chart(df['Servico'].value_counts(), color="#D8A7B1")
         with st.expander("📋 Ver Tabela"): st.dataframe(df[['Data','Horario','Nome','Servico']], use_container_width=True)
     else: st.info("Sem dados.")
-```
-
-**⚠️ Resumo do que fazer agora:**
-1.  Atualize o `agendamento.py`.
-2.  Faça o upload (`git push`).
-3.  Vá no Streamlit e clique em **Reboot App**.
-
-Isso deve resolver tanto o erro de busca de paciente quanto a instabilidade da biblioteca do calendário. Se a biblioteca ainda não estiver lá, ele vai avisar com uma tarja amarela, mas não vai travar o site! 🚀
